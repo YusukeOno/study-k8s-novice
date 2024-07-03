@@ -4,6 +4,32 @@ K8sはリソースを作成する特徴上、「リソースの作成に失敗�
 
 そんなときに、kubectlを使って調査ができると、さまざまな状況でトラブルシューティングを可能にしてくれる。
 
+- [トラブルシューティングガイドとkubectlコマンドの使い方](#トラブルシューティングガイドとkubectlコマンドの使い方)
+  - [トラブルシューティングガイド](#トラブルシューティングガイド)
+    - [PodのSTATUSカラム](#podのstatusカラム)
+  - [現状を把握するためにkubectlコマンドを使う](#現状を把握するためにkubectlコマンドを使う)
+    - [リソースを取得する : `kubectl get`](#リソースを取得する--kubectl-get)
+    - [リソースの詳細を取得する : `kubectl descrie`](#リソースの詳細を取得する--kubectl-descrie)
+    - [コンテナのログを取得する : `kubectl logs`](#コンテナのログを取得する--kubectl-logs)
+  - [詳細情報を取得するkubectlコマンドを使う](#詳細情報を取得するkubectlコマンドを使う)
+    - [デバッグ用のサイドカーコンテナを立ち上げる : `kubectl debug`](#デバッグ用のサイドカーコンテナを立ち上げる--kubectl-debug)
+    - [コンテナを即座に実行する : `kuectl run`](#コンテナを即座に実行する--kuectl-run)
+    - [コンテナにログインする : `kubectl exec`](#コンテナにログインする--kubectl-exec)
+    - [port-forwardでアプリにアクセス : `kubectl port-forward`](#port-forwardでアプリにアクセス--kubectl-port-forward)
+  - [障害を直すためのkubectlコマンドを使う](#障害を直すためのkubectlコマンドを使う)
+    - [マニフェストをその場で編集する : `kubectl edit`](#マニフェストをその場で編集する--kubectl-edit)
+    - [リソースを削除する : `kubectl delete`](#リソースを削除する--kubectl-delete)
+  - [ターミナル操作を便利するTips](#ターミナル操作を便利するtips)
+    - [自動補完を設定する](#自動補完を設定する)
+    - [kubectlのエイリアスを設定する](#kubectlのエイリアスを設定する)
+    - [リソース指定の省略](#リソース指定の省略)
+    - [kubectlの操作に役立つツール](#kubectlの操作に役立つツール)
+    - [kubectlプラグインを使う](#kubectlプラグインを使う)
+  - [デバッグする](#デバッグする)
+    - [準備 : Podが動いていることを確認する](#準備--podが動いていることを確認する)
+    - [アプリを破壊する](#アプリを破壊する)
+    - [アプリを調査する](#アプリを調査する)
+
 ## トラブルシューティングガイド
 
 ![over view](./Troubleshooting.drawio.svg)
@@ -105,3 +131,87 @@ PodにはK8sクラスタ内用のIPアドレスが割り当てられる。その
 
 `kubectl port-forward <Pod名> <転送先ポート番号>:<転送元ポート番号>`
 
+## 障害を直すためのkubectlコマンドを使う
+
+これらのコマンドは環境に変更を加えるコマンドガ多いので、本番環境では慎重に実行すること。
+
+### マニフェストをその場で編集する : `kubectl edit`
+
+kubectl editでマニフェストを修正できるが、履歴を残しにくいので非推奨。ローカル環境で使う場合でも、なるべく修正前のマニフェストを保存しておき、修正後のマニフェストをkubectl applyする形が望ましい。
+
+マニフェストを修正するエディタは、環境変数`KUBE_EDITOR`もしくは`EDITOR`のいずれかを指定する。
+
+`kubectl edit pod myapp --namespace default`
+
+### リソースを削除する : `kubectl delete`
+
+指定したリソースを削除する。kubectlにはPodを再起動するコマンドがないので、kubectl deleteで代替する。
+
+Deploymentを利用していれば、Podが再作成される。
+
+`kubectl delete <リソース名>`
+
+Deploymentを利用したPodをすべて順番に再起動したい場合は、`kubectl rollout restart`を利用する。
+
+## ターミナル操作を便利するTips
+
+### 自動補完を設定する
+
+[Kubectl autocomplete](https://kubernetes.io/docs/reference/kubectl/quick-reference/#kubectl-autocomplete)
+
+### kubectlのエイリアスを設定する
+
+公式でも推奨されている。
+
+`alias k=kubectl`
+
+### リソース指定の省略
+
+`kubectl api-resources`で`SHORTNAMES`にて確認できる。
+
+### kubectlの操作に役立つツール
+
+- [stern](https://github.com/stern/stern)
+  - Podのログを出力するツール
+  - stern実行中にPodが消されたとしても、新規に作成されたPodのログを自動で出力してくれる
+- [k9s](https://k9scli.io/)
+  - ターミナル上でUIを提供するツール
+- [starship](https://starship.rs/)
+  - ターミナルをカスタマイズするツール
+
+### kubectlプラグインを使う
+
+- kubectx
+  - コンテキスト（クラスタ接続情報）をスイッチする
+- kubeens
+  - デフォルトのnamespaceをスイッチする
+
+## デバッグする
+
+### 準備 : Podが動いていることを確認する
+
+まずは正常に動作するPodを作成する。
+
+`kubectl apply --filename chapter-05/myapp.yaml --namespace default`
+
+起動を確認する。
+
+`kubectl get pod --namespace default`
+
+### アプリを破壊する
+
+次のコマンドでマニフェストを適用する。
+
+`kubectl apply --filename chapter-05/pod-destruction.yaml --namespace default`
+
+次の順番で調査し、アプリを直す。
+
+1. kubectl get <リソース名>でリソースの状態を確認
+2. kubectl describe <リソース名>でリソースの詳細を確認
+3. kubectl edit <リソース名> で修復
+
+### アプリを調査する
+
+まず「動かなくなった」ことを確認する。K8sは宣言型であるが、kubectl applyが成功したからといってアプリが動くとは限らない。そのため、apply後は「リソースが正しく作成できているか」を確認することが大事である。
+
+`kubectl get pod myapp --namespace default`
