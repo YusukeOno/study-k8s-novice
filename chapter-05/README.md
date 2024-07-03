@@ -77,3 +77,31 @@ Deployment以外の理由でPodの参照を絞り込みたいことがある場�
 
 `kubectl apply --filename chapter-05/myapp-label.yaml`
 
+## 詳細情報を取得するkubectlコマンドを使う
+
+詳細系のコマンドは参照系よりも権限が必要な場合がある。
+
+### デバッグ用のサイドカーコンテナを立ち上げる : `kubectl debug`
+
+K8s 1.25より利用可能。
+
+`kubectl debug --stdin --tty <デバッグ対象Pod名> --image=<デバッグ用コンテナのimage> --target=<デバッグ対象のコンテナ名>`
+
+### コンテナを即座に実行する : `kuectl run`
+
+kubectl debugが使えない場合、デバッグ用のPodを立ち上げる。
+
+`kubectl run <Pod名> --image=<イメージ名>`
+
+### コンテナにログインする : `kubectl exec`
+
+kubectl execでコンテナ上でコマンドを実行することができる。
+
+`kubectl exec --stdin --tty <Pod名> -- <コマンド名>`
+
+### port-forwardでアプリにアクセス : `kubectl port-forward`
+
+PodにはK8sクラスタ内用のIPアドレスが割り当てられる。そのため、何もしないとクラスタ外からのアクセスができない。ここでは、kubectlを使ってアクセスする。
+
+`kubectl port-forward <Pod名> <転送先ポート番号>:<転送元ポート番号>`
+
