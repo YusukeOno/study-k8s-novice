@@ -20,4 +20,55 @@ Namespaceは単一クラス内のリソース群を分離するメカニズム�
 
 まとまった単位でリソースをまとめたい要件があるときにNamespaceを使う。すべてのリソースがNamespaceを利用できるわけではなく、例えばクラスタワイドに作成するリソース（例：Node）はNamespaceの適用範囲外である。
 
+## Podを作成する前にK8sクラスタの起動を確認する
 
+Podを作成する前にクラスタが起動できているか、kubectlを利用できるか、まずは確認する。
+
+```zsh
+kubectl get noeds
+```
+
+kindを利用していれば次のようにクラスタの存在を確認できる。
+
+```zsh
+kind get clusters
+```
+
+## マニフェストを利用する
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: myapp
+  labels:
+    app: myapp
+spec:
+  containers:
+  - name: hello-server
+    image: blux2/hello-server:1.0
+    ports:
+      - containerPort: 8080
+```
+
+## マニフェストをK8sクラスタに適用する
+
+`kubectl apply --filename <filename>` でK8sクラスタ上にリソースを作成できる。まずはPodが存在しないことを確認する。
+
+```zsh
+kubectl get pod --namespace default
+```
+
+続いて、マニフェストを適用する。
+
+```zsh
+kubectl apply --filename chapter-04/myapp.yaml --namespace default
+```
+
+Podが作成できていることを確認する。
+
+```zsh
+kubectl get pod --namespace default
+```
+
+STATUSがRunningになっていることが確認できればPodの作成完了である。STATUSがContainerCreatingなど、Running以外が表示されたとしても、しばらく待っていればRunningになるはず。
