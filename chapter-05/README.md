@@ -53,3 +53,27 @@ YAMLファイル形式でリソースの情報を取得する`--output yaml`
 
 `kubectl get pod <Pod名> --v=<ログレベル>`
 
+### リソースの詳細を取得する : `kubectl descrie`
+
+`kubectl get`より詳しい情報が得られる。
+
+`kubectl describe pod <Pod名>`
+
+### コンテナのログを取得する : `kubectl logs`
+
+`kubectl logs`で取得する。
+
+複数コンテナがPod内に存在する場合は、`--container`オプションを指定する。
+
+特定のDeploymentに紐づくPodのログを参照する。
+
+`kubectl logs deploy/<Deployment名>`
+
+ラベルを指定して参照するPodを絞り込む。
+
+`kubectl get pod --selector <labelのキー名>=<labelの値>`
+
+Deployment以外の理由でPodの参照を絞り込みたいことがある場合は、ラベルを指定してPodを参照する。
+
+`kubectl apply --filename chapter-05/myapp-label.yaml`
+
