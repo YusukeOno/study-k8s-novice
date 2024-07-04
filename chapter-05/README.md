@@ -215,3 +215,153 @@ Deploymentを利用したPodをすべて順番に再起動したい場合は、`
 まず「動かなくなった」ことを確認する。K8sは宣言型であるが、kubectl applyが成功したからといってアプリが動くとは限らない。そのため、apply後は「リソースが正しく作成できているか」を確認することが大事である。
 
 `kubectl get pod myapp --namespace default`
+
+ステータスがImagePullBackOffになっていることがわかる。
+
+describeで得られる情報にエラーの原因が書かれていることがある。
+
+`kubectl describe pod myapp --namespace default`
+
+```yaml
+Name:             myapp
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             kind-control-plane/172.18.0.2
+Start Time:       Wed, 03 Jul 2024 19:51:18 +0900
+Labels:           <none>
+Annotations:      <none>
+Status:           Running
+IP:               10.244.0.5
+IPs:
+  IP:  10.244.0.5
+Containers:
+  hello-server:
+    Container ID:   containerd://8af58695fdbbeec6f7a3d9c1a5b1914a694fa86d6047b7a3d3263222a47b1395
+    Image:          blux2/hello-server:1.1
+    Image ID:       docker.io/blux2/hello-server@sha256:35ab584cbe96a15ad1fb6212824b3220935d6ac9d25b3703ba259973fac5697d
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Waiting
+      Reason:       ImagePullBackOff
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    2
+      Started:      Wed, 03 Jul 2024 19:51:35 +0900
+      Finished:     Thu, 04 Jul 2024 08:29:27 +0900
+    Ready:          False
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-2vcnc (ro)
+Ephemeral Containers:
+  debugger-pkqqj:
+    Container ID:  containerd://d410956900ef84a9a0de961bedc69e2398bfc2b1a33870555b34e7263bf9b5d8
+    Image:         curlimages/curl:8.4.0
+    Image ID:      docker.io/curlimages/curl@sha256:4a3396ae573c44932d06ba33f8696db4429c419da87cbdc82965ee96a37dd0af
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      namespace
+      default
+      --
+      sh
+    State:          Waiting
+      Reason:       RunContainerError
+    Last State:     Terminated
+      Reason:       StartError
+      Message:      failed to create containerd task: failed to create shim task: OCI runtime create failed: runc create failed: unable to start container process: exec: "namespace": executable file not found in $PATH: unknown
+      Exit Code:    128
+      Started:      Thu, 01 Jan 1970 09:00:00 +0900
+      Finished:     Thu, 04 Jul 2024 07:19:37 +0900
+    Ready:          False
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:         <none>
+  debugger-8kv6x:
+    Container ID:  containerd://bfdd08b1eb7292795b5010a0e989b9c8c64918cdb30674a4443879799fcec060
+    Image:         curlimages/curl:8.4.0
+    Image ID:      docker.io/curlimages/curl@sha256:4a3396ae573c44932d06ba33f8696db4429c419da87cbdc82965ee96a37dd0af
+    Port:          <none>
+    Host Port:     <none>
+    Command:
+      sh
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Thu, 04 Jul 2024 07:23:40 +0900
+      Finished:     Thu, 04 Jul 2024 07:28:58 +0900
+    Ready:          False
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:         <none>
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-2vcnc:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason   Age                    From     Message
+  ----     ------   ----                   ----     -------
+  Warning  Failed   177m (x41 over 12h)    kubelet  Failed to pull image "blux2/hello-server:1.1": rpc error: code = NotFound desc = failed to pull and unpack image "docker.io/blux2/hello-server:1.1": failed to resolve reference "docker.io/blux2/hello-server:1.1": docker.io/blux2/hello-server:1.1: not found
+  Normal   Pulling  132m (x43 over 12h)    kubelet  Pulling image "blux2/hello-server:1.1"
+  Normal   BackOff  102s (x1003 over 12h)  kubelet  Back-off pulling image "blux2/hello-server:1.1"
+```
+
+`Reason: ImagePullBackOff`と書かれている。さらに、Eventsにnot foundと書かれている。
+
+これらから二つの仮説が立てられる。
+
+1. リポジトリが存在しない
+2. タグが存在しない
+
+DockerHubを確認すると、hello-serverは存在することがわかる。
+しかし、1.1のタグが存在しないことがわかる。
+
+次に原因がわかった。今回は、`kubectl edit`で修復するが、本番環境では正規デプロイフローで修正することを推奨する。
+
+`kubectl edit pod myapp --namespace default`
+
+タグを修正する。
+
+```yaml
+- image: blux2/hello-server:1.1
+
+- image: blux2/hello-server:1.0
+```
+
+修正後、PodのSTATUSを確認する。
+
+```zsh
+kubectl get pod myapp --namespace default
+NAME    READY   STATUS    RESTARTS      AGE
+myapp   1/1     Running   1 (12h ago)   24h
+```
+
+PodのSTATUSがRunningになっていることを確認できる。
+
+最後に掃除をする。
+
+`kubectl delete --filename chapter-05/pod-destruction.yaml --namespace default`
+
+Podが残ってないことを確認できれば、掃除完了。
+
+```zsh
+$ kubectl get pod --namespace default
+No resources found in default namespace.
+```
+
+以上
