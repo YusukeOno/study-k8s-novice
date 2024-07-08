@@ -44,4 +44,4 @@ spec:
 replicaset.apps/httpserver created
 ```
 
-ReplicaSetは同じPodを複製する関係上、自動でPodにsuffixをつける。
+ReplicaSetは同じPodを複製する関係上、自動でPodにsuffixが付与される。
