@@ -528,3 +528,5 @@ nginx-deployment-58556b4d6b-r6jtd   0/1     Terminating         0          4m30s
 deployment.apps "nginx-deployment" deleted
 ```
 
+### Deploymentを作って壊す
+
