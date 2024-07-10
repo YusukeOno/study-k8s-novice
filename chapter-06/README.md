@@ -362,3 +362,169 @@ deployment.apps "nginx-deployment" deleted
 ```
 
 続いてRolling Updateを行う。
+
+```zsh
+> kubectl apply --filename chapter-06/deployment-rollingupdate.yaml --namespace default
+deployment.apps/nginx-deployment created
+```
+
+Podが正常に作成できていることを確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                                READY   STATUS    RESTARTS   AGE
+nginx-deployment-58556b4d6b-4r5wx   1/1     Running   0          28s
+nginx-deployment-58556b4d6b-6xjxf   1/1     Running   0          28s
+nginx-deployment-58556b4d6b-dz6qs   1/1     Running   0          28s
+nginx-deployment-58556b4d6b-f6krn   1/1     Running   0          28s
+nginx-deployment-58556b4d6b-jspcm   1/1     Running   0          28s
+nginx-deployment-58556b4d6b-mrsp4   1/1     Running   0          28s
+nginx-deployment-58556b4d6b-pntgw   1/1     Running   0          28s
+nginx-deployment-58556b4d6b-qpsfz   1/1     Running   0          28s
+nginx-deployment-58556b4d6b-r6jtd   1/1     Running   0          28s
+nginx-deployment-58556b4d6b-wj2qs   1/1     Running   0          28s
+```
+
+max surge 100%で試してみる。マニフェストがmax surge 100%になっていることを確認する。
+
+```zsh
+> kubectl get deployment nginx-deployment -o jsonpath='{.spec.strategy}'
+{"rollingUpdate":{"maxSurge":"100%","maxUnavailable":"25%"},"type":"RollingUpdate"}
+```
+
+```zsh
+> kubectl get pod --watch --namespace default
+NAME                                READY   STATUS    RESTARTS   AGE
+nginx-deployment-58556b4d6b-4r5wx   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-6xjxf   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-dz6qs   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-f6krn   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-jspcm   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-mrsp4   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-pntgw   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-qpsfz   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-r6jtd   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-wj2qs   1/1     Running   0          3m29s
+```
+
+```zsh
+> kubectl apply --filename chapter-06/deployment-rollingupdate.yaml --namespace default
+deployment.apps/nginx-deployment configured
+```
+
+```zsh
+> kubectl get pod --watch --namespace default
+NAME                                READY   STATUS    RESTARTS   AGE
+nginx-deployment-58556b4d6b-4r5wx   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-6xjxf   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-dz6qs   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-f6krn   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-jspcm   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-mrsp4   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-pntgw   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-qpsfz   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-r6jtd   1/1     Running   0          3m29s
+nginx-deployment-58556b4d6b-wj2qs   1/1     Running   0          3m29s
+nginx-deployment-7947b6d4f6-c7cd5   0/1     Pending   0          0s
+nginx-deployment-7947b6d4f6-c7cd5   0/1     Pending   0          0s
+nginx-deployment-7947b6d4f6-nl4j4   0/1     Pending   0          0s
+nginx-deployment-7947b6d4f6-ms4rn   0/1     Pending   0          0s
+nginx-deployment-7947b6d4f6-nl4j4   0/1     Pending   0          0s
+nginx-deployment-7947b6d4f6-c7cd5   0/1     ContainerCreating   0          0s
+nginx-deployment-58556b4d6b-6xjxf   1/1     Terminating         0          4m17s
+nginx-deployment-7947b6d4f6-ms4rn   0/1     Pending             0          0s
+nginx-deployment-58556b4d6b-jspcm   1/1     Terminating         0          4m17s
+nginx-deployment-7947b6d4f6-rg9k4   0/1     Pending             0          0s
+nginx-deployment-7947b6d4f6-wb2ww   0/1     Pending             0          0s
+nginx-deployment-7947b6d4f6-49lgl   0/1     Pending             0          0s
+nginx-deployment-7947b6d4f6-bnbt4   0/1     Pending             0          0s
+nginx-deployment-7947b6d4f6-rg9k4   0/1     Pending             0          0s
+nginx-deployment-7947b6d4f6-nl4j4   0/1     ContainerCreating   0          0s
+nginx-deployment-7947b6d4f6-wb2ww   0/1     Pending             0          0s
+nginx-deployment-7947b6d4f6-49lgl   0/1     Pending             0          0s
+nginx-deployment-7947b6d4f6-bnbt4   0/1     Pending             0          0s
+nginx-deployment-7947b6d4f6-px6gv   0/1     Pending             0          0s
+nginx-deployment-7947b6d4f6-gx4xf   0/1     Pending             0          0s
+nginx-deployment-7947b6d4f6-v8szx   0/1     Pending             0          0s
+nginx-deployment-7947b6d4f6-px6gv   0/1     Pending             0          0s
+nginx-deployment-7947b6d4f6-gx4xf   0/1     Pending             0          0s
+nginx-deployment-7947b6d4f6-v8szx   0/1     Pending             0          0s
+nginx-deployment-7947b6d4f6-ms4rn   0/1     ContainerCreating   0          0s
+nginx-deployment-7947b6d4f6-wb2ww   0/1     ContainerCreating   0          0s
+nginx-deployment-7947b6d4f6-49lgl   0/1     ContainerCreating   0          0s
+nginx-deployment-7947b6d4f6-rg9k4   0/1     ContainerCreating   0          0s
+nginx-deployment-7947b6d4f6-bnbt4   0/1     ContainerCreating   0          0s
+nginx-deployment-7947b6d4f6-gx4xf   0/1     ContainerCreating   0          0s
+nginx-deployment-7947b6d4f6-v8szx   0/1     ContainerCreating   0          0s
+nginx-deployment-7947b6d4f6-px6gv   0/1     ContainerCreating   0          0s
+nginx-deployment-7947b6d4f6-c7cd5   1/1     Running             0          1s
+nginx-deployment-7947b6d4f6-ms4rn   1/1     Running             0          1s
+nginx-deployment-58556b4d6b-f6krn   1/1     Terminating         0          4m18s
+nginx-deployment-7947b6d4f6-nl4j4   1/1     Running             0          1s
+nginx-deployment-7947b6d4f6-wb2ww   1/1     Running             0          1s
+nginx-deployment-58556b4d6b-wj2qs   1/1     Terminating         0          4m18s
+nginx-deployment-58556b4d6b-pntgw   1/1     Terminating         0          4m18s
+nginx-deployment-58556b4d6b-mrsp4   1/1     Terminating         0          4m18s
+nginx-deployment-7947b6d4f6-gx4xf   1/1     Running             0          2s
+nginx-deployment-7947b6d4f6-49lgl   1/1     Running             0          2s
+nginx-deployment-7947b6d4f6-rg9k4   1/1     Running             0          2s
+nginx-deployment-58556b4d6b-qpsfz   1/1     Terminating         0          4m19s
+nginx-deployment-7947b6d4f6-bnbt4   1/1     Running             0          2s
+nginx-deployment-7947b6d4f6-v8szx   1/1     Running             0          2s
+nginx-deployment-58556b4d6b-dz6qs   1/1     Terminating         0          4m19s
+nginx-deployment-58556b4d6b-4r5wx   1/1     Terminating         0          4m19s
+nginx-deployment-7947b6d4f6-px6gv   1/1     Running             0          2s
+nginx-deployment-58556b4d6b-r6jtd   1/1     Terminating         0          4m19s
+nginx-deployment-58556b4d6b-jspcm   0/1     Terminating         0          4m27s
+nginx-deployment-58556b4d6b-6xjxf   0/1     Terminating         0          4m28s
+nginx-deployment-58556b4d6b-jspcm   0/1     Terminating         0          4m28s
+nginx-deployment-58556b4d6b-jspcm   0/1     Terminating         0          4m28s
+nginx-deployment-58556b4d6b-jspcm   0/1     Terminating         0          4m28s
+nginx-deployment-58556b4d6b-6xjxf   0/1     Terminating         0          4m28s
+nginx-deployment-58556b4d6b-6xjxf   0/1     Terminating         0          4m28s
+nginx-deployment-58556b4d6b-6xjxf   0/1     Terminating         0          4m28s
+nginx-deployment-58556b4d6b-f6krn   0/1     Terminating         0          4m28s
+nginx-deployment-58556b4d6b-wj2qs   0/1     Terminating         0          4m28s
+nginx-deployment-58556b4d6b-pntgw   0/1     Terminating         0          4m28s
+nginx-deployment-58556b4d6b-mrsp4   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-mrsp4   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-f6krn   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-mrsp4   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-mrsp4   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-f6krn   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-f6krn   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-pntgw   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-pntgw   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-pntgw   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-wj2qs   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-wj2qs   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-wj2qs   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-r6jtd   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-4r5wx   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-qpsfz   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-dz6qs   0/1     Terminating         0          4m29s
+nginx-deployment-58556b4d6b-4r5wx   0/1     Terminating         0          4m30s
+nginx-deployment-58556b4d6b-4r5wx   0/1     Terminating         0          4m30s
+nginx-deployment-58556b4d6b-4r5wx   0/1     Terminating         0          4m30s
+nginx-deployment-58556b4d6b-r6jtd   0/1     Terminating         0          4m30s
+nginx-deployment-58556b4d6b-dz6qs   0/1     Terminating         0          4m30s
+nginx-deployment-58556b4d6b-dz6qs   0/1     Terminating         0          4m30s
+nginx-deployment-58556b4d6b-dz6qs   0/1     Terminating         0          4m30s
+nginx-deployment-58556b4d6b-qpsfz   0/1     Terminating         0          4m30s
+nginx-deployment-58556b4d6b-qpsfz   0/1     Terminating         0          4m30s
+nginx-deployment-58556b4d6b-qpsfz   0/1     Terminating         0          4m30s
+nginx-deployment-58556b4d6b-r6jtd   0/1     Terminating         0          4m30s
+nginx-deployment-58556b4d6b-r6jtd   0/1     Terminating         0          4m30s
+```
+
+途中、Podの数が倍になっている様子が観察できたと思う。max surgeが100%というのは、元あったPodの数と同じ数だけ新規Podを作成すること示す。max surge 100%はPodの更新が最も早く、かつ安全な方法ではある。
+
+しかし、必要なリソースが倍になるため、使用する際はリソースキャパシティに注意すること。
+
+最後に掃除をする。
+
+```zsh
+> kubectl delete --filename chapter-06/deployment-rollingupdate.yaml --namespace default
+deployment.apps "nginx-deployment" deleted
+```
+
