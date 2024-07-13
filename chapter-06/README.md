@@ -530,3 +530,195 @@ deployment.apps "nginx-deployment" deleted
 
 ### Deploymentを作って壊す
 
+まず、Deployentを作る。
+
+```zsh
+> kubectl apply --filename chapter-06/deployment-hello-server.yaml --namespace default
+deployment.apps/hello-server created
+```
+
+PodがRunningになっていることを確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                            READY   STATUS    RESTARTS   AGE
+hello-server-6cc6b44795-5tcdz   1/1     Running   0          2s
+hello-server-6cc6b44795-ktq5x   1/1     Running   0          2s
+hello-server-6cc6b44795-sqzw7   1/1     Running   0          2s
+```
+
+まずはPodを消してみる。
+
+```zsh
+> kubectl delete pod hello-server-6cc6b44795-sqzw7 --namespace default
+pod "hello-server-6cc6b44795-sqzw7" deleted
+
+> kubectl get pod --namespace default
+NAME                            READY   STATUS    RESTARTS   AGE
+hello-server-6cc6b44795-5tcdz   1/1     Running   0          63s
+hello-server-6cc6b44795-ktq5x   1/1     Running   0          63s
+hello-server-6cc6b44795-lnl8b   1/1     Running   0          11s
+```
+
+Podの一つだけAGEが若いことがわかる。つまり、消されたPodの代わりに、新しくPodが作られたことがわかる。このように、Deploymentを利用することで、Podが消されても必ずDesiredなPod数に一致するようK8sが自動で再作成してくれる。
+
+次に、このDeploymentをRollingUpdateをしてみる。まずは現状のアプリが問題なく動いていることを試す。
+
+```zsh
+  > kubectl port-forward deployments/hello-server 8080:8080
+Forwarding from 127.0.0.1:8080 -> 8080
+Forwarding from [::1]:8080 -> 8080
+```
+
+```zsh
+> curl localhost:8080
+Hello, world!
+```
+
+続いて、マニフェストを適用してRollingUpdateする。
+
+```zsh
+> kubectl apply --filename chapter-06/deployment-hello-server-rollingupdate.yaml --namespace default
+deployment.apps/hello-server configured
+```
+
+マニフェストの適用結果を確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                            READY   STATUS         RESTARTS   AGE
+hello-server-6cc6b44795-5tcdz   1/1     Running        0          101s
+hello-server-6cc6b44795-ktq5x   1/1     Running        0          101s
+hello-server-6cc6b44795-lnl8b   1/1     Running        0          49s
+hello-server-6fb85ff748-msmmq   0/1     ErrImagePull   0          6s
+```
+
+Podが一つ増え、何かエラーが出ている。だが、動作確認しても、問題なく接続できる。
+
+```zsh
+> curl localhost:8080
+Hello, world!
+```
+
+Deploymentの状況を確認する。
+
+```zsh
+> kubectl get deployment --namespace default
+NAME           READY   UP-TO-DATE   AVAILABLE   AGE
+hello-server   3/3     1            3           3m37s
+```
+
+UP-TO-DATEが1になっている。これは、古いバージョンのPodをそのままに、新規バージョンのPodを1つ作成中にエラーになっていることを表している。
+
+デフォルト設定「maxUnavaliable: 25%, maxSurge: 25%」ではPod数が3つの場合、25%は0.75になる。maxUnavailableは切り下げ、maxSurgeは切り上げなので、この場合はmaxUnavailable:0、maxSurge:1となる。
+
+つまり、新規Podは同時に一つまで作成できるが、新規Podが正常に作成完了しない限り、次の古いPodを消すことができない。（新しいPodが一つ増えるとPod総数が4になり、Podを一つ消せるようになる）
+
+次のコマンドを実行してReplicaSetを見る。
+
+```zsh
+> kubectl get replicaset --namespace default
+NAME                      DESIRED   CURRENT   READY   AGE
+hello-server-6cc6b44795   3         3         3       8m37s
+hello-server-6fb85ff748   1         1         0       7m2s
+```
+
+古いバージョンのPodが残っているので、アプリの疎通ができている。
+
+では、RollingUpdateを修正していく。まずは詳細を確認する。
+
+```zsh
+> kubectl describe pod hello-server-6fb85ff748-msmmq --namespace default
+Name:             hello-server-6fb85ff748-msmmq
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             kind-control-plane/172.18.0.2
+Start Time:       Sat, 13 Jul 2024 09:54:43 +0900
+Labels:           app=hello-server
+                  pod-template-hash=6fb85ff748
+Annotations:      <none>
+Status:           Pending
+IP:               10.244.0.67
+IPs:
+  IP:           10.244.0.67
+Controlled By:  ReplicaSet/hello-server-6fb85ff748
+Containers:
+  hello-server:
+    Container ID:   
+    Image:          blux2/hello-server:1.3
+    Image ID:       
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Waiting
+      Reason:       ImagePullBackOff
+    Ready:          False
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-npwhj (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-npwhj:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                     From               Message
+  ----     ------     ----                    ----               -------
+  Normal   Scheduled  8m50s                   default-scheduler  Successfully assigned default/hello-server-6fb85ff748-msmmq to kind-control-plane
+  Normal   Pulling    7m10s (x4 over 8m50s)   kubelet            Pulling image "blux2/hello-server:1.3"
+  Warning  Failed     7m4s (x4 over 8m45s)    kubelet            Failed to pull image "blux2/hello-server:1.3": rpc error: code = NotFound desc = failed to pull and unpack image "docker.io/blux2/hello-server:1.3": failed to resolve reference "docker.io/blux2/hello-server:1.3": docker.io/blux2/hello-server:1.3: not found
+  Warning  Failed     7m4s (x4 over 8m45s)    kubelet            Error: ErrImagePull
+  Warning  Failed     6m49s (x6 over 8m44s)   kubelet            Error: ImagePullBackOff
+  Normal   BackOff    3m45s (x19 over 8m44s)  kubelet            Back-off pulling image "blux2/hello-server:1.3"
+  ```
+
+`docker.io/blux2/hello-server:1.3: not found` とあるので、タグを1.3から1.2に修正する。
+
+```zsh
+> kubectl edit deployment hello-server --namespace default
+deployment.apps/hello-server edited
+```
+
+PodとReplicaSetの状態を見てみる。
+
+```zsh
+> kubectl get pod,replicaset --namespace default
+NAME                                READY   STATUS    RESTARTS   AGE
+pod/hello-server-5d6fd6dbb9-bdvmn   1/1     Running   0          30s
+pod/hello-server-5d6fd6dbb9-s94g7   1/1     Running   0          31s
+pod/hello-server-5d6fd6dbb9-tr44h   1/1     Running   0          49s
+
+NAME                                      DESIRED   CURRENT   READY   AGE
+replicaset.apps/hello-server-5d6fd6dbb9   3         3         3       49s
+replicaset.apps/hello-server-6cc6b44795   0         0         0       13m
+replicaset.apps/hello-server-6fb85ff748   0         0         0       11m
+```
+
+無事、RollingUpdateが完了している。
+
+```zsh
+> curl localhost:8080
+Hello, world! Let's learn Kubernetes!
+```
+
+最後に掃除をしておく。
+
+```zsh
+> kubectl delete --filename chapter-06/deployment-hello-server-rollingupdate.yaml --namespace default
+deployment.apps "hello-server" deleted
+```
+
