@@ -722,3 +722,62 @@ Hello, world! Let's learn Kubernetes!
 deployment.apps "hello-server" deleted
 ```
 
+## Podへのアクセスを助けるService
+
+DeploymentはIPアドレスを持たないため、Deploymentで作ったリソースにアクセスするためにはIPアドレスが割り振られているPod個々にアクセスする必要がある。それでは、Rolloing Updateの機能があってもアクセスしているPodが消えてしまえば接続が途切れてしまう。
+
+Deploymentで作成した複数Podへのアクセスを適切にルーティングしてもらうために、Serviceというリソースを利用する。
+
+Serviceだけ作成しても動かないので、Serviceに接続するDeploymentも作成して動作を確認する。
+
+```zsh
+> kubectl apply --filename chapter-06/deployment-hello-server.yaml --namespace default
+deployment.apps/hello-server created
+```
+
+Podが作成できていることを確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                            READY   STATUS    RESTARTS   AGE
+hello-server-6cc6b44795-4z6jb   1/1     Running   0          41s
+hello-server-6cc6b44795-gtrx4   1/1     Running   0          41s
+hello-server-6cc6b44795-wkp6n   1/1     Running   0          41s
+```
+
+では、Serviceリソースを作成する。
+
+```zsh
+> kubectl apply --filename chapter-06/service.yaml --namespace default
+service/hello-server-service created
+```
+
+Serviceが作成できているか確認する。
+
+```zsh
+> kubectl get service hello-server-service --namespace default
+NAME                   TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)    AGE
+hello-server-service   ClusterIP   10.96.189.2   <none>        8080/TCP   44s
+```
+
+Serviceが作成できた。port-forwardして動作を確認する。
+
+```zsh
+> kubectl port-forward svc/hello-server-service 8080:8080 --namespace default
+Forwarding from 127.0.0.1:8080 -> 8080
+Forwarding from [::1]:8080 -> 8080
+
+> curl localhost:8080
+Hello, world!
+```
+
+hello-serverと通信ができた。
+
+### ServiceのTypeについて
+
+Typeを指定しない場合はデフォルトでClusterIPが指定される。
+
+- ClusterIP:クラスタ内部のIPアドレスでServiceを公開する。このTypeで指定されたIPアドレスはクラスタ内部からしか疎通できない。Ingressというリソースを利用することで外部公開が可能になる。
+- NodePort:すべてのNodeのIPアドレスで指定したポート番号（NodePort）を公開する。
+- LoadBalancer:外部ロードバランサを用いて外部IPアドレスを公開する。ロードバランサは別で用意する必要がある。
+- ExternalName:ServiceをexternalNameフィールドの内容にマッピングする。このマッピングにより、クラスのDNSサーバがその外部ホスト名の値を持つCNAMEレコードを返すように設定される。
