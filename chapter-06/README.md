@@ -781,3 +781,136 @@ Typeを指定しない場合はデフォルトでClusterIPが指定される。
 - NodePort:すべてのNodeのIPアドレスで指定したポート番号（NodePort）を公開する。
 - LoadBalancer:外部ロードバランサを用いて外部IPアドレスを公開する。ロードバランサは別で用意する必要がある。
 - ExternalName:ServiceをexternalNameフィールドの内容にマッピングする。このマッピングにより、クラスのDNSサーバがその外部ホスト名の値を持つCNAMEレコードを返すように設定される。
+
+ClusterIPでクラスタ内の通信ができることを確認する。まずはIPアドレスを参照する。
+
+```zsh
+> kubectl get service hello-server-service --namespace default
+NAME                   TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)    AGE
+hello-server-service   ClusterIP   10.96.189.2   <none>        8080/TCP   7m6s
+```
+
+続いて、新たにPodを作成し、curlを叩く。
+
+```zsh
+> kubectl run curl --image curlimages/curl --rm --stdin --tty --restart=Never --command -- curl 10.96.189.2:8080
+Hello, world!pod "curl" deleted
+```
+
+ClusterIPを指定し、別のPodからhello-serverにアクセスできた。最後に掃除をする。
+
+```zsh
+> kubectl delete --filename chapter-06/deployment-hello-server.yaml --namespace default
+deployment.apps "hello-server" deleted
+
+> kubectl delete --filename chapter-06/service.yaml --namespace default
+service "hello-server-service" deleted
+```
+
+次はNodePortでアクセスする。NodePortを利用するとクラスタ外からアクセスが可能になるため、port-forwardする必要がなくなる。
+
+まずは、既存クラスタを一度掃除する。
+
+```zsh
+> kind delete cluster
+Deleting cluster "kind" ...
+Deleted nodes: ["kind-control-plane"]
+```
+
+続いて、次のファイルをクラスタ構築時に引数で参照する。
+
+```zsh
+> kind create cluster --name kind-nodeport --config kind/export-mapping.yaml --image=kindest/node:v1.29.0
+Creating cluster "kind-nodeport" ...
+ ✓ Ensuring node image (kindest/node:v1.29.0) 🖼
+ ✓ Preparing nodes 📦  
+ ✓ Writing configuration 📜 
+ ✓ Starting control-plane 🕹️ 
+ ✓ Installing CNI 🔌 
+ ✓ Installing StorageClass 💾 
+Set kubectl context to "kind-kind-nodeport"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-kind-nodeport
+
+Have a question, bug, or feature request? Let us know! https://kind.sigs.k8s.io/#community 🙂
+```
+
+Deploymentを作成し直す。
+
+```zsh
+> kubectl apply --filename chapter-06/deployment-hello-server.yaml --namespace default
+deployment.apps/hello-server created
+```
+
+続いて、Serviceを作成する。
+
+```zsh
+> kubectl apply --filename chapter-06/service-nodeport.yaml --namespace default
+service/hello-server-external created
+```
+
+Serviceが作成されていることを確認する。
+
+```zsh
+> kubectl get service hello-server-external --namespace default
+NAME                    TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+hello-server-external   NodePort   10.96.198.240   <none>        8080:30599/TCP   37s
+```
+
+アクセスする。まずはNodeのIPを取得する。
+
+```zsh
+> kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}'
+172.18.0.2
+```
+
+取得したInternalIPを利用してアクセスする。
+
+```zsh
+> curl localhost:30599
+Hello, world!
+```
+
+NodePortは全Nodeに対してPortを紐づけるので、port-forwardをしなくてもhello-serverにアクセスできる。毎回port-forwardをする必要がなく便利だが、NodePortはNodeが故障などで利用できなくなると使えなくなってしまう。ローカルの開発環境で使うには便利だが、本番運用ではClusterIPやLoadBalancerを利用する方が良い。
+
+掃除のため、リソースを削除する。
+
+```zsh
+> kubectl delete --filename chapter-06/deployment-hello-server.yaml --namespace default
+deployment.apps "hello-server" deleted
+
+> kubectl delete --filename chapter-06/service-nodeport.yaml --namespace default
+service "hello-server-external" deleted
+```
+
+### Serviceを利用したDNS
+
+K8sではService用のDNSレコードを自動で作成してくれるため、FQDNを覚えておくと良い。
+
+まずは、DeploymentとServiceを作成する。
+
+```zsh
+> kubectl apply --filename chapter-06/service.yaml --namespace default
+service/hello-server-service created
+
+> kubectl apply --filename chapter-06/deployment-hello-server.yaml --namespace default
+deployment.apps/hello-server created
+```
+
+続いて、kubectl runを利用してPodからcurlを時効し、hello-server-servicにアクセスできることを確認する。
+
+```zsh
+> kubectl --namespace default run curl --image curlimages/curl --rm --stdin --tty --restart=Never --command -- curl hello-server-service.default.svc.cluster.local:8080
+Hello, world!pod "curl" deleted
+```
+
+最後に掃除をする。
+
+```zsh
+> kubectl delete --filename chapter-06/service.yaml --namespace default
+service "hello-server-service" deleted
+
+> kubectl delete --filename chapter-06/deployment-hello-server.yaml --namespace default
+deployment.apps "hello-server" deleted
+```
