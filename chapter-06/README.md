@@ -1814,3 +1814,105 @@ secret "nginx-secret" deleted
 
 ## 1回限りのタスクを実行するためのJob
 
+Jobは1回限り実行したいPodに利用する。Jobを実行すると、Podの実行が成功するまで指定した回数リトライを実行する。また、Podは複数同時に実行することも可能。
+
+```yaml
+> cat chapter-06/job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: date-checker
+spec:
+  template:
+    spec:
+      containers:
+      - name: date
+        image: ubuntu:22.04
+        command: ["date"]
+      restartPolicy: Never
+  backoffLimit: 4
+```
+
+このJobはUbuntu上でdateコマンドを打つだけの簡単なジョブである。
+
+```zsh
+> kubectl apply --filename chapter-06/job.yaml --namespace default
+job.batch/date-checker created
+```
+
+Jobリソースを確認する。
+
+```zsh
+> kubectl get job --namespace default
+NAME           COMPLETIONS   DURATION   AGE
+date-checker   1/1           21s        32s
+```
+
+Podリソースも確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                 READY   STATUS      RESTARTS   AGE
+date-checker-vkd2q   0/1     Completed   0          55s
+```
+
+PodのReadyカラムをみると、0/1となっている。PodのReadyは「コンテナが起動中」を意味している。Jobが環境するとコンテナは停止しているため、ReadyなPodがひとつもないことは想定通りの挙動である。
+
+Podのログを確認する。
+
+```zsh
+> kubectl logs date-checker-vkd2q --namespace default
+Sun Jul 14 21:50:47 UTC 2024
+```
+
+Podのログにdateコマンドの結果が書かれている。Jobの詳細を見てみる。
+
+```yaml
+> kubectl describe job date-checker --namespace default
+Name:             date-checker
+Namespace:        default
+Selector:         batch.kubernetes.io/controller-uid=f8347365-a02c-4216-ab56-75166b2fd504
+Labels:           batch.kubernetes.io/controller-uid=f8347365-a02c-4216-ab56-75166b2fd504
+                  batch.kubernetes.io/job-name=date-checker
+                  controller-uid=f8347365-a02c-4216-ab56-75166b2fd504
+                  job-name=date-checker
+Annotations:      <none>
+Parallelism:      1
+Completions:      1
+Completion Mode:  NonIndexed
+Start Time:       Mon, 15 Jul 2024 06:50:28 +0900
+Completed At:     Mon, 15 Jul 2024 06:50:49 +0900
+Duration:         21s
+Pods Statuses:    0 Active (0 Ready) / 1 Succeeded / 0 Failed
+Pod Template:
+  Labels:  batch.kubernetes.io/controller-uid=f8347365-a02c-4216-ab56-75166b2fd504
+           batch.kubernetes.io/job-name=date-checker
+           controller-uid=f8347365-a02c-4216-ab56-75166b2fd504
+           job-name=date-checker
+  Containers:
+   date:
+    Image:      ubuntu:22.04
+    Port:       <none>
+    Host Port:  <none>
+    Command:
+      date
+    Environment:  <none>
+    Mounts:       <none>
+  Volumes:        <none>
+Events:
+  Type    Reason            Age    From            Message
+  ----    ------            ----   ----            -------
+  Normal  SuccessfulCreate  3m44s  job-controller  Created pod: date-checker-vkd2q
+  Normal  Completed         3m23s  job-controller  Job completed
+```
+
+Pods Statusesを見ると、「1 Succeeded」とJobの実行結果が成功であることがわかる。
+
+最後に掃除をする。
+
+```zsh
+> kubectl delete --filename chapter-06/job.yaml --namespace default
+job.batch "date-checker" deleted
+```
+
+## Jobを定期的に実行するためのCronJob
