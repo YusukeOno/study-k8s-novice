@@ -1733,3 +1733,84 @@ SecretをPodに読み込む方法は2種類ある。
 
 Secretのデータを作成する。
 
+```zsh
+> echo -n 'admin' | base64
+YWRtaW4=
+
+> echo -n 'admin123' | base64
+YWRtaW4xMjM=
+```
+
+マニフェストを適用する。
+
+```zsh
+> kubectl apply --filename chapter-06/secret/nginx-sample.yaml --namespace default
+pod/nginx-sample created
+secret/nginx-secret created
+```
+
+リソースが正常に作成できていることを確認する。
+
+```zsh
+> kubectl get pod,secrets --namespace default
+NAME               READY   STATUS    RESTARTS   AGE
+pod/nginx-sample   1/1     Running   0          35s
+
+NAME                  TYPE     DATA   AGE
+secret/nginx-secret   Opaque   2      35s
+```
+
+問題なく作成できた。それでは、NGINXのコンテナにログインして環境変数を確認する。
+
+```zsh
+> kubectl exec -it nginx-sample -- /bin/sh
+# echo $USERNAME
+admin
+# echo $PASSWORD
+admin123
+```
+
+環境変数が読み込まれていることが確認できたので、掃除をする。
+
+```zsh
+> kubectl delete --filename chapter-06/secret/nginx-sample.yaml --namespace default
+pod "nginx-sample" deleted
+secret "nginx-secret" deleted
+```
+
+### ボリュームを利用してコンテナ設定ファイルを読み込む
+
+NGINXコンテナ内の/etc/configというパスにSecertを読み込むマニフェストを利用する。
+
+```zsh
+> kubectl apply --filename chapter-06/secret/nginx-volume.yaml --namespace default
+pod/nginx-sample created
+secret/nginx-secret created
+```
+
+Podが作成されていることを確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME           READY   STATUS    RESTARTS   AGE
+nginx-sample   1/1     Running   0          34s
+```
+
+問題なく作成できたので、NGINXのコンテナにログインして環境変数を参照してみる。
+
+```zsh
+> kubectl exec --stdin --tty nginx-sample -- /bin/sh
+# cat /etc/config/server.key
+eM9ku3ecCpUL9zPoIIuG2ptZZC5Cu4ZCQXRymlHajYvZyffpM6
+```
+
+無事server.keyが読み込めたので、掃除をする。
+
+```zsh
+> kubectl delete --filename chapter-06/secret/nginx-volume.yaml --namespace default
+pod "nginx-sample" deleted
+secret "nginx-secret" deleted
+```
+
+## 1回限りのタスクを実行するためのJob
+
