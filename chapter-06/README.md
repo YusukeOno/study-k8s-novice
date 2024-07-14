@@ -1916,3 +1916,63 @@ job.batch "date-checker" deleted
 ```
 
 ## Jobを定期的に実行するためのCronJob
+
+CronJobは定期的にJobを生成するリソースである。CronJobはJobを作成し、JobはPodを作成する。
+
+```yaml
+> cat chapter-06/cronjob.yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: date
+spec:
+  schedule: "*/2 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: date
+            image: ubuntu:22.04
+            command: ["date"]
+```
+
+scheduleにいつJobを実行するかを記載する。
+
+```zsh
+> kubectl apply --filename chapter-06/cronjob.yaml --namespace default
+cronjob.batch/date created
+```
+
+作成したCronJobリソースを参照する。
+
+```zsh
+> kubectl get cronjob --namespace default
+NAME   SCHEDULE      SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+date   */2 * * * *   False     0        23s             31s
+```
+
+```zsh
+> kubectl get job --namespace default
+NAME            COMPLETIONS   DURATION   AGE
+date-28683240   1/1           3s         2m6s
+date-28683242   1/1           3s         6s
+```
+
+定期的に実行されていることがわかる。
+
+Podも参照してみる。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                  READY   STATUS      RESTARTS   AGE
+date-28683240-gll6t   0/1     Completed   0          2m49s
+date-28683242-rc9kh   0/1     Completed   0          49s
+```
+
+AGEカラムをみると2分ごとに実行されていることがわかる。最後に掃除をする。
+
+```zsh
+> kubectl delete --filename chapter-06/cronjob.yaml --namespace default
+cronjob.batch "date" deleted
+```
