@@ -1127,3 +1127,138 @@ kubectl cluster-info --context kind-kind
 Have a nice day! 👋
 ```
 
+## Podの外部から情報を読み込むConfigMap
+
+ConfigMapを利用する方法は３つある。
+
+1. コンテナ内のコマンドの引数として読み込む
+2. コンテナの環境変数として読み込む
+3. ボリュームを利用してアプリケーションのファイルとして読み込む
+
+### コンテナの環境変数として読み込む
+
+以下のマニフェストは、ポート番号を外部から指定できるようにしてある。
+
+```yaml
+> cat ./chapter-06/configmap/hello-server-env.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-server
+  labels:
+    app: hello-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-server
+  template:
+    metadata:
+      labels:
+        app: hello-server
+    spec:
+      containers:
+      - name: hello-server
+        image: blux2/hello-server:1.4
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: hello-server-configmap
+              key: PORT
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hello-server-configmap
+data:
+  PORT: "8081"
+```
+
+```zsh
+> kubectl apply --filename chapter-06/configmap/hello-server-env.yaml --namespace default
+deployment.apps/hello-server created
+configmap/hello-server-configmap created
+```
+
+リソースが作成できていることを確認する。
+
+```zsh
+> kubectl get deployment,configmap --namespace default
+NAME                           READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/hello-server   1/1     1            1           41s
+
+NAME                               DATA   AGE
+configmap/hello-server-configmap   1      41s
+configmap/kube-root-ca.crt         1      8m4s
+```
+
+port-forwardを利用して疎通確認してみる。
+
+```zsh
+> kubectl port-forward deployments/hello-server 8081:8081 --namespace default
+Forwarding from 127.0.0.1:8081 -> 8081
+Forwarding from [::1]:8081 -> 8081
+
+> curl localhost:8081
+Hello, world! Let's learn Kubernetes!
+```
+
+続いて、ConfigMapのPORTに書かれている値を変更してみる。まず、`./chapter-06/configmap/hello-server-env.yaml`を変更してみる。
+
+```diff
+> git diff -- chapter-06/configmap/hello-server-env.yaml
+diff --git a/chapter-06/configmap/hello-server-env.yaml b/chapter-0>
+index 04521f2..a2736eb 100644
+--- a/chapter-06/configmap/hello-server-env.yaml
++++ b/chapter-06/configmap/hello-server-env.yaml
+@@ -30,4 +30,4 @@ kind: ConfigMap
+ metadata:
+   name: hello-server-configmap
+ data:
+-  PORT: "8081"
++  PORT: "5555"
+```
+
+変更を適用する。
+
+```zsh
+> kubectl apply --filename chapter-06/configmap/hello-server-env.yaml --namespace default
+deployment.apps/hello-server unchanged
+configmap/hello-server-configmap configured
+```
+
+ConfigMap経由で設定した環境変数は、アプリの再起動をしないとアプリに反映されなイノで、次のコマンドでアプリを再起動する。
+
+```zsh
+> kubectl rollout restart deployment/hello-server --namespace default
+deployment.apps/hello-server restarted
+```
+
+port-forwardで疎通確認する。以前のセッションが残っている場合は、一度切断する。
+
+```zsh
+> kubectl port-forward deployments/hello-server 5555:5555 --namespace default
+Forwarding from 127.0.0.1:5555 -> 5555
+Forwarding from [::1]:5555 -> 5555
+
+> curl localhost:5555
+Hello, world! Let's learn Kubernetes!
+```
+
+ConfigMapを利用して環境変数を変更できることがわかる。最後に掃除をする。
+
+```zsh
+> kubectl delete --filename chapter-06/configmap/hello-server-env.yaml --namespace default
+deployment.apps "hello-server" deleted
+configmap "hello-server-configmap" deleted
+```
+
+しかしながら、環境変数を変更するために毎回アプリの再作成が必要だとサービスの運用が現実的ではない。次の「ボリュームを利用してコンテナに設定ファイルを読み込ませる」を利用するとアプリの再作成なしでConfigMapの内容を再読み込みできる。
+
+### ボリュームを利用してアプリのファイルとして読み込む
+
+Podにはボリュームを設定することができ、消えてほしくないファイルを保存したり、Pod間でファイルを共有したりするファイルシステムを利用するために使用する。
+
+
