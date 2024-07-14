@@ -914,3 +914,216 @@ service "hello-server-service" deleted
 > kubectl delete --filename chapter-06/deployment-hello-server.yaml --namespace default
 deployment.apps "hello-server" deleted
 ```
+
+### Serviceを壊す
+
+まずは正しく動く環境を作る。
+
+```zsh
+> kubectl apply --filename chapter-06/service-nodeport.yaml --namespace default
+service/hello-server-external created
+
+> kubectl apply --filename chapter-06/deployment-hello-server.yaml --namespace default
+deployment.apps/hello-server created
+```
+
+アプリが動作していることを確認する。
+
+```zsh
+> curl localhost:30599
+Hello, world!
+```
+
+続いて、次のようにマニフェストを適用する。
+
+```zsh
+> kubectl apply --filename chapter-06/service-destruction.yaml --namespace default
+service/hello-server-external configured
+```
+
+動作確認してみる。
+
+```zsh
+> curl localhost:30599
+curl: (52) Empty reply from server
+```
+
+動かないので、各種リソースを見ていく。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                            READY   STATUS    RESTARTS   AGE
+hello-server-6cc6b44795-4kklt   1/1     Running   0          2m51s
+hello-server-6cc6b44795-647v2   1/1     Running   0          2m51s
+hello-server-6cc6b44795-v96zp   1/1     Running   0          2m51s
+```
+
+Podは問題なく動作している。
+
+```zsh
+> kubectl get deployment --namespace default
+NAME           READY   UP-TO-DATE   AVAILABLE   AGE
+hello-server   3/3     3            3           3m26s
+```
+
+Deploymentも問題なく動作している。
+
+```zsh
+> kubectl get service --namespace default
+NAME                    TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+hello-server-external   NodePort    10.96.190.229   <none>        8080:30599/TCP   4m33s
+kubernetes              ClusterIP   10.96.0.1       <none>        443/TCP          19h
+```
+
+Serviceも問題なく動作している。
+
+原因を切り分けるには、なるべくアプリに近いとこから切り分けていくと良い。小さいところから切り分けていき、なるべく狭い範囲で原因を特定できるようにする。
+
+1. Pod内からアプリの接続確認を行う
+2. クラスタ内かつ別Podから接続確認を行う
+3. クラスタ内かつ別PodからService経由で接続確認を行う
+
+動作させているコンテナにはシェルが入っていないため、デバッグ用コンテナを起動して確認する。外部に公開しているポート番号とアプリが公開しているポート番号が異なるので注意する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                            READY   STATUS    RESTARTS   AGE
+hello-server-6cc6b44795-4kklt   1/1     Running   0          7m5s
+hello-server-6cc6b44795-647v2   1/1     Running   0          7m5s
+hello-server-6cc6b44795-v96zp   1/1     Running   0          7m5s
+
+> kubectl --namespace default debug --stdin --tty hello-server-6cc6b44795-v96zp --image curlimages/curl --target=hello-server -- sh
+Targeting container "hello-server". If you don't see processes from this container it may be because the container runtime doesn't support this feature.
+Defaulting debug container name to debugger-ctq8j.
+If you don't see a command prompt, try pressing enter.
+
+~ $ curl localhost:8080
+Hello, world!~ $ 
+~ $ exit
+Session ended, the ephemeral container will not be restarted but may be reattached using 'kubectl attach hello-server-6cc6b44795-v96zp -c debugger-ctq8j -i -t' if it is still running
+```
+
+特に問題なさそうなので、Pod内の問題ではないことがわかる。
+
+続いて、クラスタ内に新規に起動したPodから接続を確認する。まずはPod一覧を参照し、適当なPodのIPを取得しておく。
+
+```zsh
+> kubectl get pods -o custom-columns=NAME:.metadata.name,IP:.status.podIP
+NAME                            IP
+hello-server-6cc6b44795-4kklt   10.244.0.14
+hello-server-6cc6b44795-647v2   10.244.0.12
+hello-server-6cc6b44795-v96zp   10.244.0.13
+```
+
+続いて、新規作成Podから接続確認する。
+
+```zsh
+> kubectl --namespace default run curl --image curlimages/curl --rm --stdin --tty --restart=Never --command -- curl 10.244.0.14:8080
+Hello, world!pod "curl" deleted
+```
+
+クラスタ内の別Podからのアクセスは問題ないことがわかる。
+
+Serviceの情報を取得しておく。
+
+```zsh
+> kubectl get svc -o custom-columns=NAME:.metadata.name,IP:.spec.clusterIP
+NAME                    IP
+hello-server-external   10.96.190.229
+kubernetes              10.96.0.1
+```
+
+ServiceのIPを利用してService経由でアプリにアクセスする。
+
+```zsh
+> kubectl --namespace default run curl --image curlimages/curl --rm --stdin --tty --restart=Never --command -- curl 10.96.190.229:8080
+curl: (7) Failed to connect to 10.96.190.229 port 8080 after 0 ms: Couldn't connect to server
+pod "curl" deleted
+pod default/curl terminated (Error)
+```
+
+Serviceを通すとアクセスできなくなっている。
+
+Serviceの設定を確認する。
+
+```zsh
+> kubectl describe service hello-server-external --namespace default
+Name:                     hello-server-external
+Namespace:                default
+Labels:                   <none>
+Annotations:              <none>
+Selector:                 app=hello-serve
+Type:                     NodePort
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.96.190.229
+IPs:                      10.96.190.229
+Port:                     <unset>  8080/TCP
+TargetPort:               8080/TCP
+NodePort:                 <unset>  30599/TCP
+Endpoints:                <none>
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+```
+
+適用前のファイルとのdiffを取得する。
+
+```diff
+> kubectl diff --filename chapter-06/service-nodeport.yaml
+diff -u -N /var/folders/c0/j8z9nmwj3r93swy5clqm0jb00000gn/T/LIVE-3816784694/v1.Service.default.hello-server-external /var/folders/c0/j8z9nmwj3r93swy5clqm0jb00000gn/T/MERGED-3691262470/v1.Service.default.hello-server-external
+--- /var/folders/c0/j8z9nmwj3r93swy5clqm0jb00000gn/T/LIVE-3816784694/v1.Service.default.hello-server-external        2024-07-14 09:18:25
++++ /var/folders/c0/j8z9nmwj3r93swy5clqm0jb00000gn/T/MERGED-3691262470/v1.Service.default.hello-server-external      2024-07-14 09:18:25
+@@ -24,7 +24,7 @@
+     protocol: TCP
+     targetPort: 8080
+   selector:
+-    app: hello-serve
++    app: hello-server
+   sessionAffinity: None
+   type: NodePort
+ status:
+```
+
+selectorの値がtypoしていることがわかる。
+
+今回は、マニフェストをapplyし直すことで修正が可能ではある。
+
+```zsh
+> kubectl apply --filename chapter-06/service-nodeport.yaml --namespace default
+service/hello-server-external configured
+
+> curl localhost:30599
+Hello, world!
+
+> kubectl --namespace default run curl --image curlimages/curl --rm --stdin --tty --restart=Never --command -- curl 10.96.190.229:8080
+Hello, world!pod "curl" deleted
+```
+
+最後にクラスタごと削除し、掃除をする。
+
+```zsh
+> kind delete cluster -n kind-nodeport
+Deleting cluster "kind-nodeport" ...
+Deleted nodes: ["kind-nodeport-control-plane"]
+```
+
+デフォルトクラスタを立ち上げ直す。
+
+```zsh
+> kind create cluster --image=kindest/node:v1.29.0
+Creating cluster "kind" ...
+ ✓ Ensuring node image (kindest/node:v1.29.0) 🖼
+ ✓ Preparing nodes 📦  
+ ✓ Writing configuration 📜 
+ ✓ Starting control-plane 🕹️ 
+ ✓ Installing CNI 🔌 
+ ✓ Installing StorageClass 💾 
+Set kubectl context to "kind-kind"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-kind
+
+Have a nice day! 👋
+```
+
