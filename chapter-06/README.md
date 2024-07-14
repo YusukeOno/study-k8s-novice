@@ -1261,4 +1261,425 @@ configmap "hello-server-configmap" deleted
 
 Podにはボリュームを設定することができ、消えてほしくないファイルを保存したり、Pod間でファイルを共有したりするファイルシステムを利用するために使用する。
 
+以下のマニフェストではConfigMapからボリュームを作成し、コンテナにボリュームを読み込んでいる。
 
+```yaml
+> cat ./chapter-06/configmap/hello-server-volume.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-server
+  labels:
+    app: hello-server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: hello-server
+  template:
+    metadata:
+      labels:
+        app: hello-server
+    spec:
+      containers:
+      - name: hello-server
+        image: blux2/hello-server:1.5
+        volumeMounts:
+        - name: hello-server-config
+          mountPath: /etc/config
+      volumes:
+      - name: hello-server-config
+        configMap:
+          name: hello-server-configmap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hello-server-configmap
+data:
+  myconfig.txt: |-
+    I am hungry.
+```
+
+```zsh
+> kubectl apply --filename chapter-06/configmap/hello-server-volume.yaml --namespace default
+deployment.apps/hello-server created
+configmap/hello-server-configmap created
+```
+
+リソースが正常に作成できていることを確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                            READY   STATUS    RESTARTS   AGE
+hello-server-594ccc7f64-9qvqg   1/1     Running   0          37s
+hello-server-594ccc7f64-phv8x   1/1     Running   0          37s
+hello-server-594ccc7f64-zfhvt   1/1     Running   0          37s
+
+> kubectl describe configmap hello-server-configmap --namespace default
+Name:         hello-server-configmap
+Namespace:    default
+Labels:       <none>
+Annotations:  <none>
+
+Data
+====
+myconfig.txt:
+----
+I am hungry.
+
+BinaryData
+====
+
+Events:  <none>
+```
+
+ConfigMapの内容が確認できる。続いて、動作を確認する。
+
+```zsh
+> kubectl port-forward deployment/hello-server 8080:8080
+Forwarding from 127.0.0.1:8080 -> 8080
+Forwarding from [::1]:8080 -> 8080
+
+> curl localhost:8080
+I am hungry.
+```
+
+最後に掃除をする。
+
+```zsh
+> kubectl delete --filename chapter-06/configmap/hello-server-volume.yaml
+deployment.apps "hello-server" deleted
+configmap "hello-server-configmap" deleted
+```
+
+### ConfigMapを設定したら壊れた
+
+ConfigMapを使ってアプリを壊してみる。まずは、正しく動く環境を作る。一度使用したhello-server-env.yamlを利用する。
+
+```diff
+> git diff -- chapter-06/configmap/hello-server-env.yaml
+diff --git a/chapter-06/configmap/hello-server-env.yaml b/chapter-06/configmap/hello-server->
+index a2736eb..04521f2 100644
+--- a/chapter-06/configmap/hello-server-env.yaml
++++ b/chapter-06/configmap/hello-server-env.yaml
+@@ -30,4 +30,4 @@ kind: ConfigMap
+ metadata:
+   name: hello-server-configmap
+ data:
+-  PORT: "5555"
++  PORT: "8081"
+```
+
+```zsh
+> kubectl apply --filename chapter-06/configmap/hello-server-env.yaml --namespace default
+deployment.apps/hello-server created
+configmap/hello-server-configmap created
+```
+
+正常にPodが作成できることを確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                            READY   STATUS    RESTARTS   AGE
+hello-server-66b94d84cb-27drf   1/1     Running   0          32s
+```
+
+port-forwardで動作確認する。
+
+```zsh
+> kubectl port-forward deployment/hello-server 8081:8081
+Forwarding from 127.0.0.1:8081 -> 8081
+Forwarding from [::1]:8081 -> 8081
+
+> curl localhost:8081
+Hello, world! Let's learn Kubernetes!
+```
+
+では、新しいマニフェストを適用する。
+
+```zsh
+> kubectl apply --filename chapter-06/configmap/hello-server-destruction.yaml --namespace default
+deployment.apps/hello-server configured
+configmap/hello-server-configmap unchanged
+```
+
+疎通確認してみる。
+
+```zsh
+> curl localhost:8081
+curl: (7) Failed to connect to localhost port 8081 after 0 ms: Couldn't connect to server
+```
+
+Podの状態を確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                           READY   STATUS                       RESTARTS   AGE
+hello-server-67588987f-cfxgs   0/1     CreateContainerConfigError   0          2m8s
+```
+
+STATUSがCreateContainerConfigErrorになっている。Podに問題がありそうだということがわかったので、詳細を確認する。
+
+```zsh
+> kubectl describe pod --namespace default
+Name:             hello-server-67588987f-cfxgs
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             kind-control-plane/172.18.0.2
+Start Time:       Sun, 14 Jul 2024 13:22:53 +0900
+Labels:           app=hello-server
+                  pod-template-hash=67588987f
+Annotations:      <none>
+Status:           Pending
+IP:               10.244.0.11
+IPs:
+  IP:           10.244.0.11
+Controlled By:  ReplicaSet/hello-server-67588987f
+Containers:
+  hello-server:
+    Container ID:   
+    Image:          blux2/hello-server:1.4
+    Image ID:       
+    Port:           <none>
+    Host Port:      <none>
+    State:          Waiting
+      Reason:       CreateContainerConfigError
+    Ready:          False
+    Restart Count:  0
+    Environment:
+      PORT:  <set to the key 'PORT' of config map 'hello-server-configmap'>  Optional: false
+      HOST:  <set to the key 'HOST' of config map 'hello-server-configmap'>  Optional: false
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-hxzhc (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-hxzhc:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                   From               Message
+  ----     ------     ----                  ----               -------
+  Normal   Scheduled  3m26s                 default-scheduler  Successfully assigned default/hello-server-67588987f-cfxgs to kind-control-plane
+  Warning  Failed     80s (x12 over 3m25s)  kubelet            Error: couldn't find key HOST in ConfigMap default/hello-server-configmap
+  Normal   Pulled     65s (x13 over 3m25s)  kubelet            Container image "blux2/hello-server:1.4" already present on machine
+```
+
+`Error: couldn't find key HOST in ConfigMap default/hello-server-configmap`なので、ConfigMapにHOSTというkeyが無いということがわかる。
+
+次のコマンドを利用してDeploymentのマニフェストでHOSTのkeyを指定しているところを確認する。
+
+```yaml
+> kubectl get deployment hello-server --output yaml --namespace default
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "2"
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{},"labels":{"app":"hello-server"},"name":"hello-server","namespace":"default"},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"hello-server"}},"strategy":{"rollingUpdate":{"maxSurge":0},"type":"RollingUpdate"},"template":{"metadata":{"labels":{"app":"hello-server"}},"spec":{"containers":[{"env":[{"name":"PORT","valueFrom":{"configMapKeyRef":{"key":"PORT","name":"hello-server-configmap"}}},{"name":"HOST","valueFrom":{"configMapKeyRef":{"key":"HOST","name":"hello-server-configmap"}}}],"image":"blux2/hello-server:1.4","name":"hello-server"}]}}}}
+  creationTimestamp: "2024-07-14T04:19:36Z"
+  generation: 2
+  labels:
+    app: hello-server
+  name: hello-server
+  namespace: default
+  resourceVersion: "17567"
+  uid: 98da961a-e343-4766-a531-4ea46ede4c4a
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: hello-server
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: hello-server
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              key: PORT
+              name: hello-server-configmap
+        - name: HOST
+          valueFrom:
+            configMapKeyRef:
+              key: HOST
+              name: hello-server-configmap
+        image: blux2/hello-server:1.4
+        imagePullPolicy: IfNotPresent
+        name: hello-server
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+status:
+  conditions:
+  - lastTransitionTime: "2024-07-14T04:19:38Z"
+    lastUpdateTime: "2024-07-14T04:19:38Z"
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  - lastTransitionTime: "2024-07-14T04:19:36Z"
+    lastUpdateTime: "2024-07-14T04:22:53Z"
+    message: ReplicaSet "hello-server-67588987f" is progressing.
+    reason: ReplicaSetUpdated
+    status: "True"
+    type: Progressing
+  observedGeneration: 2
+  replicas: 1
+  unavailableReplicas: 1
+  updatedReplicas: 1
+```
+
+Deploymentでは確かにhello-server-configmapにHOSTがあることを想定している。
+
+続いて、hello-server-configmapという名前のConfigMapの中身を見てみる。
+
+```yaml
+> kubectl get configmap hello-server-configmap --output yaml --namespace default
+apiVersion: v1
+data:
+  PORT: "8081"
+kind: ConfigMap
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"v1","data":{"PORT":"8081"},"kind":"ConfigMap","metadata":{"annotations":{},"name":"hello-server-configmap","namespace":"default"}}
+  creationTimestamp: "2024-07-14T04:19:36Z"
+  name: hello-server-configmap
+  namespace: default
+  resourceVersion: "17276"
+  uid: 35ff7db1-39d2-49aa-8d30-3c0d82e530b4
+```
+
+ConfigMapのdataにはHOSTが無いことがわかる。
+
+こういった間違いでもDeploymentのRolling Upgradeを利用していれば、アプリが接続不要になることを防いでくれるはずだが、何が悪かったのだろうか。
+
+改でDeploymentのマニフェストを確認してみる。
+
+```yaml
+> kubectl get deployment hello-server --output yaml --namespace default
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "2"
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{},"labels":{"app":"hello-server"},"name":"hello-server","namespace":"default"},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"hello-server"}},"strategy":{"rollingUpdate":{"maxSurge":0},"type":"RollingUpdate"},"template":{"metadata":{"labels":{"app":"hello-server"}},"spec":{"containers":[{"env":[{"name":"PORT","valueFrom":{"configMapKeyRef":{"key":"PORT","name":"hello-server-configmap"}}},{"name":"HOST","valueFrom":{"configMapKeyRef":{"key":"HOST","name":"hello-server-configmap"}}}],"image":"blux2/hello-server:1.4","name":"hello-server"}]}}}}
+  creationTimestamp: "2024-07-14T04:19:36Z"
+  generation: 2
+  labels:
+    app: hello-server
+  name: hello-server
+  namespace: default
+  resourceVersion: "17567"
+  uid: 98da961a-e343-4766-a531-4ea46ede4c4a
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: hello-server
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: hello-server
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              key: PORT
+              name: hello-server-configmap
+        - name: HOST
+          valueFrom:
+            configMapKeyRef:
+              key: HOST
+              name: hello-server-configmap
+        image: blux2/hello-server:1.4
+        imagePullPolicy: IfNotPresent
+        name: hello-server
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+status:
+  conditions:
+  - lastTransitionTime: "2024-07-14T04:19:38Z"
+    lastUpdateTime: "2024-07-14T04:19:38Z"
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  - lastTransitionTime: "2024-07-14T04:19:36Z"
+    lastUpdateTime: "2024-07-14T04:22:53Z"
+    message: ReplicaSet "hello-server-67588987f" is progressing.
+    reason: ReplicaSetUpdated
+    status: "True"
+    type: Progressing
+  observedGeneration: 2
+  replicas: 1
+  unavailableReplicas: 1
+  updatedReplicas: 1
+```
+
+maxSurgeが0になっている。maxSurgeが1以上であれば、正常に動作するPodが残ったままなので、壊れることはなかった。
+
+原因がわかったので。次のマニフェストを適用して修正する。
+
+```diff
+> git diff -- chapter-06/configmap/hello-server-destruction.yaml
+diff --git a/chapter-06/configmap/hello-server-d>
+index 0be6afe..42e6f99 100644
+--- a/chapter-06/configmap/hello-server-destruct>
++++ b/chapter-06/configmap/hello-server-destruct>
+@@ -40,3 +40,4 @@ metadata:
+   name: hello-server-configmap
+ data:
+   PORT: "8081"
++  HOST: "localhost"
+```

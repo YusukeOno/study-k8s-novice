@@ -30,4 +30,4 @@ kind: ConfigMap
 metadata:
   name: hello-server-configmap
 data:
-  PORT: "5555"
+  PORT: "8081"
