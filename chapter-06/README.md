@@ -352,7 +352,7 @@ nginx-deployment-7947b6d4f6-wgnzt   1/1     Running             0          1s
 nginx-deployment-7947b6d4f6-jtmsn   1/1     Running             0          1s
 ```
 
-Podが一気にTerminating→ContainerCreating→Runningと遷移したことがわかる。Recreateは同時にすべてのPodを再作成するため全Podが更新完了するまでの速度は速いが、その分再作成時にアプリが一旦接獄不能になってしまう。
+Podが一気にTerminating→ContainerCreating→Runningと遷移したことがわかる。Recreateは同時にすべてのPodを再作成するため全Podが更新完了するまでの速度は速いが、その分再作成時にアプリが一旦接続不能になってしまう。
 
 最後に掃除をする。
 
@@ -565,7 +565,7 @@ Podの一つだけAGEが若いことがわかる。つまり、消されたPod�
 次に、このDeploymentをRollingUpdateをしてみる。まずは現状のアプリが問題なく動いていることを試す。
 
 ```zsh
-  > kubectl port-forward deployments/hello-server 8080:8080
+> kubectl port-forward deployments/hello-server 8080:8080
 Forwarding from 127.0.0.1:8080 -> 8080
 Forwarding from [::1]:8080 -> 8080
 ```
