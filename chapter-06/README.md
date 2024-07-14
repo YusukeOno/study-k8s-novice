@@ -1683,3 +1683,53 @@ index 0be6afe..42e6f99 100644
    PORT: "8081"
 +  HOST: "localhost"
 ```
+
+修正したら適用する。
+
+```zsh
+> kubectl apply --filename chapter-06/configmap/hello-server-destruction.yaml --namespace default
+deployment.apps/hello-server unchanged
+configmap/hello-server-configmap configured
+```
+
+Podを確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                           READY   STATUS    RESTARTS   AGE
+hello-server-67588987f-cfxgs   1/1     Running   0          12m
+```
+
+再度port-forwardしてアプリの接続確認を行う。
+
+```zsh
+> kubectl port-forward deployment/hello-server 8081:8081 --namespace default
+Forwarding from 127.0.0.1:8081 -> 8081
+
+> curl localhost:8081
+Hello, world! Let's learn Kubernetes!
+```
+
+動作確認ができたので、最後に掃除をする。
+
+```zsh
+> kubectl delete --filename chapter-06/configmap/hello-server-destruction.yaml --namespace default
+deployment.apps "hello-server" deleted
+configmap "hello-server-configmap" deleted
+```
+
+## 機密データを扱うためのSecret
+
+クレデンシャル情報をコーディングしたく無い場合や、環境ごとに情報が変わる場合など、アプリの外から値を設定したい場合にConfigMapが使えるが、ConfigMapを参照できる人が全員秘密情報にアクセスできるのは、セキュリティ上好ましくない。
+
+そこでSecretというリソースを使用することで、アクセス権を分けられる。SecretのデータはBase64でエンコードして登録する必要がある。
+
+SecretをPodに読み込む方法は2種類ある。
+
+1. コンテナの環境変数として読み込む
+2. ボリュームを利用してコンテナに設定ファイルを読み込む
+
+### コンテナの環境変数として読み込む　Secret
+
+Secretのデータを作成する。
+
