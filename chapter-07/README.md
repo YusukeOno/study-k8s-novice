@@ -208,5 +208,20 @@ Events:
 
 ### Startup probe
 
-Startup probeは、Podの初回起動時のみに利用す流Probeである。
+Startup probeは、Podの初回起動時のみに利用するProbeである。起動が遅いアプリなどに使用することが想定される。Startup probeはK8s version 1.18から導入された機能なので、それいぜんはReadiness probeやLiveness probeのinitialDelaySecondsで代替していた。
+
+マニフェストは、Readiness/Liveness probeとほぼ同じ。
+
+```yaml
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 10
+```
+
+この設定では最大30秒 x 10回 = 300秒コンテナの起動を待つ設定となる。
+
+### STATEはRunningだが、、
 
