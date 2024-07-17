@@ -512,3 +512,45 @@ spec:
 コンテナごとにCPUとメモリのRequestsを指定することができる。
 
 ### コンテナのリソース使用量を制限する：Resource limits
+
+コンテナが使用できるリソース使用量の上限を指定する。コンテナはこのLimitsを超えてリソースを使用することはできない。メモリが上限値を超える場合、Out Of Memory(OOM)でPodはkillされる。CPUが上限値を超えた場合、即座にPodがkillされることはないが、その代わりスロットリングが発生し、アプリの動作が遅くなる。
+
+### リソースの単位
+
+リソースの指定ができることはわかったが、単位は一体を何を意味しているのかを詳しく見ていく。
+
+メモリ：単位を指定しない場合はバイトを意味する。他にもK、KiやM、Miなどをつけることができる、
+
+CPU：単位を指定しない場合はCPUのコアを意味する。1mならば、0.001コアとなる。
+
+### PodのQuality of Service(QoS) Classes
+
+リソース設定に関連してQoSは覚えておいた方が良い。Nodeのメモリが完全に枯渇してしまうと、そのNodeに載っているすべてのコンテナが動作できなくなってしまうのを防ぐため、OOM Killerという役割のプログラムがいる。これは、QoSに応じてOOMKillするPodの優先順位を決定し、必要に応じて優先度の低いPodからOOMKillする。
+
+QoSクラスにはGuaranteed、Burstable、BestEffortの3種類がある。BestEffort、Burstable、Guaranteedの順にOOM Killが発生する。
+
+- Guaranteed: Pod内のコンテナ全てにリソースのRequestsとLimitsが指定されている。さらに、メモリのRequests=Limits、CPUもRequests＝Limitsとなる値が指定されている。
+- Burstable: Pod内のコンテナのうち少なくとも1つはメモリまたはCPUのRequests/Limitsが指定されている。
+- BestEffort: GuaranteedでもBurstableでもないもの。リソースに何も指定していない。
+
+次のコマンドでPodを作成する。
+
+```zsh
+> kubectl apply --filename chapter-07/pod-resource-handson.yaml --namespace default
+pod/hello-server created
+```
+
+次のコマンドでPodのQoSクラスを知ることができる。QoSクラスのどれに当たるかわからなくなった場合、直接確認すると良い。
+
+```zsh
+> kubectl get pod hello-server --output jsonpath='{.status.qosClass}' --namespace default
+Guaranteed
+```
+
+掃除をする。
+
+```zsh
+> kubectl delete --filename chapter-07/pod-resource-handson.yaml --namespace default
+pod "hello-server" deleted
+```
+
