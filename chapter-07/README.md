@@ -479,3 +479,36 @@ deployment.apps "hello-server" deleted
 ```
 
 ## アプリに適切なリソースを指定する
+
+アプリに適切なリソースを指定することは、安全にアプリを運用する上で大切である。特にK8sではリソースの指定方法によってスケジュールが変わるため、必ず指定するようにする。デフォルトで指定できるリソースはCPU・メモリ・Ephemeral Storage。ここではよく使うメモリとCPUについて説明する。
+
+マニフェストは以下。
+
+```yaml
+> cat chapter-07/pod-resource-handson.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: hello-server
+  name: hello-server
+spec:
+  containers:
+  - name: hello-server
+    image: blux2/hello-server:1.6
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "10m"
+      limits:
+        memory: "64Mi"
+        cpu: "10m"
+```
+
+### コンテナのリソース使用量を要求する：Resource requests
+
+確保したいリソースの最低使用量を指定することができる。K8sのスケジューラはこの値を見てスケジュールするNodeを決めている。Requestsの値が確保できるNodeを調べ、該当するNodeにスケジュールする。どのNodeもRequestsに書かれている量が確保できなければ、Podがスケジュールされることはない。
+
+コンテナごとにCPUとメモリのRequestsを指定することができる。
+
+### コンテナのリソース使用量を制限する：Resource limits
