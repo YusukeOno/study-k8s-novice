@@ -554,3 +554,242 @@ Guaranteed
 pod "hello-server" deleted
 ```
 
+### またしてもPodが壊れた
+
+リソース周りの指定内容が理由でPodが動かなくなることはよくある。
+
+```zsh
+> kubectl apply --filename chapter-07/deployment-resource-handson.yaml --namespace default
+deployment.apps/hello-server created
+```
+
+しばらく待ってもPodが全て起動しない。Podの状況を確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                           READY   STATUS    RESTARTS      AGE
+hello-server-9cbfdfd5c-2t4pt   0/1     Pending   0             10h
+hello-server-9cbfdfd5c-56tfr   0/1     Pending   0             10h
+hello-server-9cbfdfd5c-wck98   1/1     Running   1 (37s ago)   10h
+```
+
+何が起こっているのか、Podの詳細を見ていく。先ほど参照したPodのうちPendingになっているものを確認する。
+
+```yaml
+> kubectl describe pod hello-server-9cbfdfd5c-2t4pt --namespace default
+Name:             hello-server-9cbfdfd5c-2t4pt
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             <none>
+Labels:           app=hello-server
+                  pod-template-hash=9cbfdfd5c
+Annotations:      <none>
+Status:           Pending
+IP:               
+IPs:              <none>
+Controlled By:    ReplicaSet/hello-server-9cbfdfd5c
+Containers:
+  hello-server:
+    Image:      blux2/hello-server:1.6
+    Port:       8080/TCP
+    Host Port:  0/TCP
+    Limits:
+      cpu:     10m
+      memory:  5Gi
+    Requests:
+      cpu:        10m
+      memory:     5Gi
+    Liveness:     http-get http://:8080/health delay=10s timeout=1s period=5s #success=1 #failure=3
+    Readiness:    http-get http://:8080/health delay=5s timeout=1s period=5s #success=1 #failure=3
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-jldbg (ro)
+Conditions:
+  Type           Status
+  PodScheduled   False 
+Volumes:
+  kube-api-access-jldbg:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   Guaranteed
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason            Age                From               Message
+  ----     ------            ----               ----               -------
+  Warning  FailedScheduling  9h (x10 over 10h)  default-scheduler  0/1 nodes are available: 1 Insufficient memory. preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.
+  Warning  FailedScheduling  4m33s              default-scheduler  0/1 nodes are available: 1 Insufficient memory. preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.
+```
+
+`FailedScheduling`となっていることがわかる。どうやら要求した量のメモリを割り当てられるNodeがなかったようだ。
+
+では、Nodeはどのような設定になっているのか確認する。
+
+```yaml
+> kubectl describe node --namespace default
+Name:               kind-control-plane
+Roles:              control-plane
+Labels:             beta.kubernetes.io/arch=arm64
+                    beta.kubernetes.io/os=linux
+                    kubernetes.io/arch=arm64
+                    kubernetes.io/hostname=kind-control-plane
+                    kubernetes.io/os=linux
+                    node-role.kubernetes.io/control-plane=
+Annotations:        kubeadm.alpha.kubernetes.io/cri-socket: unix:///run/containerd/containerd.sock
+                    node.alpha.kubernetes.io/ttl: 0
+                    volumes.kubernetes.io/controller-managed-attach-detach: true
+CreationTimestamp:  Sun, 14 Jul 2024 09:24:24 +0900
+Taints:             <none>
+Unschedulable:      false
+Lease:
+  HolderIdentity:  kind-control-plane
+  AcquireTime:     <unset>
+  RenewTime:       Fri, 19 Jul 2024 07:13:24 +0900
+Conditions:
+  Type             Status  LastHeartbeatTime                 LastTransitionTime                Reason                       Message
+  ----             ------  -----------------                 ------------------                ------                       -------
+  MemoryPressure   False   Fri, 19 Jul 2024 07:12:25 +0900   Sun, 14 Jul 2024 09:24:22 +0900   KubeletHasSufficientMemory   kubelet has sufficient memory available
+  DiskPressure     False   Fri, 19 Jul 2024 07:12:25 +0900   Sun, 14 Jul 2024 09:24:22 +0900   KubeletHasNoDiskPressure     kubelet has no disk pressure
+  PIDPressure      False   Fri, 19 Jul 2024 07:12:25 +0900   Sun, 14 Jul 2024 09:24:22 +0900   KubeletHasSufficientPID      kubelet has sufficient PID available
+  Ready            True    Fri, 19 Jul 2024 07:12:25 +0900   Sun, 14 Jul 2024 09:24:42 +0900   KubeletReady                 kubelet is posting ready status
+Addresses:
+  InternalIP:  172.18.0.2
+  Hostname:    kind-control-plane
+Capacity:
+  cpu:                2
+  ephemeral-storage:  102625208Ki
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  hugepages-32Mi:     0
+  hugepages-64Ki:     0
+  memory:             6065108Ki
+  pods:               110
+Allocatable:
+  cpu:                2
+  ephemeral-storage:  102625208Ki
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  hugepages-32Mi:     0
+  hugepages-64Ki:     0
+  memory:             6065108Ki
+  pods:               110
+System Info:
+  Machine ID:                 991e7e917bbc491f80867172735e1983
+  System UUID:                991e7e917bbc491f80867172735e1983
+  Boot ID:                    d1c95a6e-6f57-4558-bf23-3d6f5b657dca
+  Kernel Version:             6.6.30-0-virt
+  OS Image:                   Debian GNU/Linux 11 (bullseye)
+  Operating System:           linux
+  Architecture:               arm64
+  Container Runtime Version:  containerd://1.7.1
+  Kubelet Version:            v1.29.0
+  Kube-Proxy Version:         v1.29.0
+PodCIDR:                      10.244.0.0/24
+PodCIDRs:                     10.244.0.0/24
+ProviderID:                   kind://docker/kind/kind-control-plane
+Non-terminated Pods:          (10 in total)
+  Namespace                   Name                                          CPU Requests  CPU Limits  Memory Requests  Memory Limits  Age
+  ---------                   ----                                          ------------  ----------  ---------------  -------------  ---
+  default                     hello-server-9cbfdfd5c-wck98                  10m (0%)      10m (0%)    5Gi (86%)        5Gi (86%)      10h
+  kube-system                 coredns-76f75df574-62kgn                      100m (5%)     0 (0%)      70Mi (1%)        170Mi (2%)     4d21h
+  kube-system                 coredns-76f75df574-ptcxn                      100m (5%)     0 (0%)      70Mi (1%)        170Mi (2%)     4d21h
+  kube-system                 etcd-kind-control-plane                       100m (5%)     0 (0%)      100Mi (1%)       0 (0%)         4d21h
+  kube-system                 kindnet-rbjnd                                 100m (5%)     100m (5%)   50Mi (0%)        50Mi (0%)      4d21h
+  kube-system                 kube-apiserver-kind-control-plane             250m (12%)    0 (0%)      0 (0%)           0 (0%)         4d21h
+  kube-system                 kube-controller-manager-kind-control-plane    200m (10%)    0 (0%)      0 (0%)           0 (0%)         4d21h
+  kube-system                 kube-proxy-8r5n5                              0 (0%)        0 (0%)      0 (0%)           0 (0%)         4d21h
+  kube-system                 kube-scheduler-kind-control-plane             100m (5%)     0 (0%)      0 (0%)           0 (0%)         4d21h
+  local-path-storage          local-path-provisioner-6f8956fb48-bl257       0 (0%)        0 (0%)      0 (0%)           0 (0%)         4d21h
+Allocated resources:
+  (Total limits may be over 100 percent, i.e., overcommitted.)
+  Resource           Requests      Limits
+  --------           --------      ------
+  cpu                960m (48%)    110m (5%)
+  memory             5410Mi (91%)  5510Mi (93%)
+  ephemeral-storage  0 (0%)        0 (0%)
+  hugepages-1Gi      0 (0%)        0 (0%)
+  hugepages-2Mi      0 (0%)        0 (0%)
+  hugepages-32Mi     0 (0%)        0 (0%)
+  hugepages-64Ki     0 (0%)        0 (0%)
+Events:
+  Type    Reason                   Age                    From             Message
+  ----    ------                   ----                   ----             -------
+  Normal  Starting                 6m5s                   kube-proxy       
+  Normal  Starting                 6m11s                  kubelet          Starting kubelet.
+  Normal  NodeHasSufficientMemory  6m11s (x8 over 6m11s)  kubelet          Node kind-control-plane status is now: NodeHasSufficientMemory
+  Normal  NodeHasNoDiskPressure    6m11s (x8 over 6m11s)  kubelet          Node kind-control-plane status is now: NodeHasNoDiskPressure
+  Normal  NodeHasSufficientPID     6m11s (x7 over 6m11s)  kubelet          Node kind-control-plane status is now: NodeHasSufficientPID
+  Normal  NodeAllocatableEnforced  6m11s                  kubelet          Updated Node Allocatable limit across pods
+  Normal  RegisteredNode           5m38s                  node-controller  Node kind-control-plane event: Registered Node kind-control-plane in Controller
+```
+
+今回のkindのクラスタでは1つのNodeにControl Planeも乗せているため、kube-apisserverなども同じNodeに乗っていることがわかる。
+
+```plane text
+  default                     hello-server-9cbfdfd5c-wck98                  10m (0%)      10m (0%)    5Gi (86%)        5Gi (86%)      10h
+```
+
+今回、applyしたマニフェストのコンテナのメモリが全体の86%使用していることがわかる。これでは、あと二つのPodは起動できない。Capacityに記載されている通り、このNodeは`memory: 6065108Ki`だと書かれている。
+
+次のコマンドを実行してDeploymentで指定されているメモリを稼働しているリソースから取得する。
+
+```zsh
+> kubectl get deployment hello-server -o=jsonpath='{.spec.template.spec.containers[0].resources.requests}' --namespace default
+{"cpu":"10m","memory":"5Gi"}
+```
+
+リソース指定量が十分かどうかは実環境の使用量や性能試験の結果などをもとにチューニングすべ気である。
+
+では、次のようにメモリのrequestsとlimitsを64Miに変更しよう。
+
+```diff
+> kubectl diff --filename chapter-07/deployment-resource-handson.yaml --namespace default
+diff -u -N /var/folders/c0/j8z9nmwj3r93swy5clqm0jb00000gn/T/LIVE-1987337710/apps.v1.Deployment.default.hello-server /var/folders/c0/j8z9nmwj3r93swy5clqm0jb00000gn/T/MERGED-1149805053/apps.v1.Deployment.default.hello-server
+--- /var/folders/c0/j8z9nmwj3r93swy5clqm0jb00000gn/T/LIVE-1987337710/apps.v1.Deployment.default.hello-server       2024-07-19 07:22:36
++++ /var/folders/c0/j8z9nmwj3r93swy5clqm0jb00000gn/T/MERGED-1149805053/apps.v1.Deployment.default.hello-server     2024-07-19 07:22:36
+@@ -6,7 +6,7 @@
+     kubectl.kubernetes.io/last-applied-configuration: |
+       {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{},"labels":{"app":"hello-server"},"name":"hello-server","namespace":"default"},"spec":{"replicas":3,"selector":{"matchLabels":{"app":"hello-server"}},"template":{"metadata":{"labels":{"app":"hello-server"}},"spec":{"containers":[{"image":"blux2/hello-server:1.6","livenessProbe":{"httpGet":{"path":"/health","port":8080},"initialDelaySeconds":10,"periodSeconds":5},"name":"hello-server","ports":[{"containerPort":8080}],"readinessProbe":{"httpGet":{"path":"/health","port":8080},"initialDelaySeconds":5,"periodSeconds":5},"resources":{"limits":{"cpu":"10m","memory":"5Gi"},"requests":{"cpu":"10m","memory":"5Gi"}}}]}}}}
+   creationTimestamp: "2024-07-18T12:01:38Z"
+-  generation: 2
++  generation: 3
+   labels:
+     app: hello-server
+   name: hello-server
+@@ -61,10 +61,10 @@
+         resources:
+           limits:
+             cpu: 10m
+-            memory: 64Gi
++            memory: 5Gi
+           requests:
+             cpu: 10m
+-            memory: 64Gi
++            memory: 5Gi
+         terminationMessagePath: /dev/termination-log
+         terminationMessagePolicy: File
+       dnsPolicy: ClusterFirst
+```
+
+修正内容を確認する。
+
+```zsh
+> kubectl get deployment hello-server -o=jsonpath='{.spec.template.spec.containers[0].resources.requests}' --namespace default
+{"cpu":"10m","memory":"64Gi"}
+```
+
+64Miが反映されていることが確認できる。しばらくするとPodが全て正常に稼働していることがわかる。
+
+最後に掃除をする。
+
+```zsh
+> kubectl delete --filename chapter-07/deployment-resource-handson.yaml --namespace default
+
+deployment.apps "hello-server" deleted
+```
+
