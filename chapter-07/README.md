@@ -793,3 +793,161 @@ diff -u -N /var/folders/c0/j8z9nmwj3r93swy5clqm0jb00000gn/T/LIVE-1987337710/apps
 deployment.apps "hello-server" deleted
 ```
 
+続いて、メモリリークを起こしてOOMを発生されてみる。他のPodに影響を起こさないためのOOMなので、危険性はないが、もちろん開発環境でのみ実行しよう。
+
+このハンズオンでは、Goのプログラム内であらかじめメモリリークを発生させるようにしてある。
+
+```zsh
+> kubectl apply --filename chapter-07/deployment-memory-leak.yaml --namespace default
+deployment.apps/hello-server created
+```
+
+しばらくするとPodが全てRunningになる。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                            READY   STATUS    RESTARTS   AGE
+hello-server-856d5c6c7b-28pxz   1/1     Running   0          13m
+hello-server-856d5c6c7b-cglsz   1/1     Running   0          13m
+hello-server-856d5c6c7b-vlkz2   1/1     Running   0          13m
+```
+
+続いて、port-forwardを行う。アプリにアクセスすることでメモリリークが発生するようにできている。15秒ほど経つと、OOMKilledと出ているのがわかる。
+
+
+```zsh
+> kubectl port-forward deployments/hello-server 8080:8080 --namespace default
+Forwarding from 127.0.0.1:8080 -> 8080
+Forwarding from [::1]:8080 -> 8080
+
+> curl localhost:8080
+curl: (52) Empty reply from server
+
+> kubectl get pod --watch --namespace default
+NAME                            READY   STATUS    RESTARTS      AGE
+hello-server-856d5c6c7b-28pxz   1/1     Running   0             2d10h
+hello-server-856d5c6c7b-cglsz   1/1     Running   0             2d10h
+hello-server-856d5c6c7b-vlkz2   1/1     Running   1 (75s ago)   2d10h
+hello-server-856d5c6c7b-vlkz2   0/1     OOMKilled   1 (106s ago)   2d10h
+hello-server-856d5c6c7b-vlkz2   0/1     CrashLoopBackOff   1 (13s ago)    2d10h
+hello-server-856d5c6c7b-vlkz2   1/1     Running            2 (16s ago)    2d10h
+```
+
+またしばらく観察するとRESTARTSが1、2と増えていく。PodのRESTARTSが1以上であること自体はよくあるので、通常、RESTARTSが1になっているだけでは気づかないかもしれない。継続的にRESTARTSが増えているなど、モニタリングを工夫すると良い。
+
+OOMKilledが発生したPodの詳細を確認する。
+
+```yaml
+> kubectl describe pod hello-server-856d5c6c7b-vlkz2 --namespace default
+Name:             hello-server-856d5c6c7b-vlkz2
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             kind-control-plane/172.18.0.2
+Start Time:       Fri, 19 Jul 2024 21:16:08 +0900
+Labels:           app=hello-server
+                  pod-template-hash=856d5c6c7b
+Annotations:      <none>
+Status:           Running
+IP:               10.244.0.6
+IPs:
+  IP:           10.244.0.6
+Controlled By:  ReplicaSet/hello-server-856d5c6c7b
+Containers:
+  hello-server:
+    Container ID:   containerd://31a83376d5427aa3c904375b29b6a2410c3f5bc57169ea3a5fd90035d5a2fb67
+    Image:          blux2/hello-server:1.7
+    Image ID:       docker.io/blux2/hello-server@sha256:e34bb060e65c7f5cc58001c7e373e781e481b8875426227c3e1e4ac7709059af
+    Port:           8080/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Mon, 22 Jul 2024 07:19:38 +0900
+    Last State:     Terminated
+      Reason:       OOMKilled
+      Exit Code:    137
+      Started:      Mon, 22 Jul 2024 07:17:41 +0900
+      Finished:     Mon, 22 Jul 2024 07:19:23 +0900
+    Ready:          True
+    Restart Count:  2
+    Limits:
+      cpu:     10m
+      memory:  100Mi
+    Requests:
+      cpu:        10m
+      memory:     100Mi
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-g4vvj (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-g4vvj:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   Guaranteed
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason   Age                    From     Message
+  ----     ------   ----                   ----     -------
+  Warning  BackOff  3m2s                   kubelet  Back-off restarting failed container hello-server in pod hello-server-856d5c6c7b-vlkz2_default(617a0d2e-3982-45ec-bfcf-35d801f79fc0)
+  Normal   Created  2m50s (x3 over 2d10h)  kubelet  Created container hello-server
+  Normal   Pulled   2m50s (x2 over 4m47s)  kubelet  Container image "blux2/hello-server:1.7" already present on machine
+  Normal   Started  2m48s (x3 over 2d10h)  kubelet  Started container hello-server
+```
+
+Eventsを確認しても、OOMKilledされたかどうかわからない。Readiness/Liveness probeが設定されていても「タイムアウト」と出ているだけで正確な理由がわからない。
+
+そこで参照するのがLast StateとReasonである。次のコマンドでlastStateを取得する。
+
+```json
+> kubectl get pod hello-server-856d5c6c7b-vlkz2 --output=jsonpath='{.status.containerStatuses[0].lastState}' --namespace default| jq .
+{
+  "terminated": {
+    "containerID": "containerd://8d32824087deb8a977a1eedadf04c0b798720d4fb201b88a8e601bd260e0bf4e",
+    "exitCode": 137,
+    "finishedAt": "2024-07-21T22:19:23Z",
+    "reason": "OOMKilled",
+    "startedAt": "2024-07-21T22:17:41Z"
+  }
+}
+```
+
+lastStateでterminatedでreasonにOOMKilledと書かれている。イメージタグを1.8に更新することでOOMKilledが発生しなくなるようになっているので、kubectl editで修正する。
+
+```zsh
+> kubectl edit deployment/hello-server --namespace default
+deployment.apps/hello-server edited
+```
+
+Podが全て再作成されていることを確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                            READY   STATUS    RESTARTS   AGE
+hello-server-58654c5c9f-7ztsp   1/1     Running   0          48s
+hello-server-58654c5c9f-ftf9q   1/1     Running   0          28s
+hello-server-58654c5c9f-px27q   1/1     Running   0          24s
+```
+
+port-forwardで動作確認する。
+
+```zsh
+> kubectl port-forward deployments/hello-server 8080:8080 --namespace default
+Forwarding from 127.0.0.1:8080 -> 8080
+Forwarding from [::1]:8080 -> 8080
+
+> curl localhost:8080
+Hello, world! Let's learn Kubernetes!
+```
+
+最後に掃除する。
