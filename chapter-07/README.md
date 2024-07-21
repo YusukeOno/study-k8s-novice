@@ -951,3 +951,11 @@ Hello, world! Let's learn Kubernetes!
 ```
 
 最後に掃除する。
+
+```zsh
+> kubectl delete --filename chapter-07/deployment-memory-leak.yaml --namespace default
+deployment.apps "hello-server" deleted
+```
+
+今回のようにメモリリークが発生しても無尽蔵にリソースをしようしないために、リソースにRequestsとLimitsを指定しておくことでNode全体を安全に運用できる。
+
