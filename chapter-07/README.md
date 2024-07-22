@@ -959,3 +959,25 @@ deployment.apps "hello-server" deleted
 
 今回のようにメモリリークが発生しても無尽蔵にリソースをしようしないために、リソースにRequestsとLimitsを指定しておくことでNode全体を安全に運用できる。
 
+## Podのスケジュールに便利な機能を理解する
+
+Podのスケジューリングを制御することは本番でサービスを安全に運用するにあたって知っておきたい。例えば、同じNodeにPodを乗せないことでNodeの障害に備えたり、特定の用途に使うPod専用にNodeを立ち上げたりすることができる。ここではNodeとPodの関係性を制御できる機能を紹介する。
+
+### Nodeを指定する:Node selector
+
+Node selectorは特定のNodeにのみスケジュールするという制御を行う機能である。例えば、SSDを使っているNodeにのみ`disktype: ssd`というラベルが付与されている場合、次のようなマニフェストでSSDを使っているNodeにのみPodをスケジュールできる。
+
+```yaml
+> cat chapter-07/pod-nodeselector.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.25.3
+  nodeSelector:
+    disktype: ssd
+```
+
