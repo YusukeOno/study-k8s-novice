@@ -981,3 +981,4 @@ spec:
     disktype: ssd
 ```
 
+### Podのスケジュールを柔軟に指定する:AffinityとAnti-Affinity
