@@ -1034,3 +1034,39 @@ operatorにはIn以外にもNotInやExistsなどを指定できるため、ラ�
 
 #### Pod AffinityとPod Anti-affinity
 
+spec.affinity以下にpodAffinity/podAntiAffiityを指定するが、「Pod間のAffinity」と理解した方が良い。Node affinityがNodeのラベルに基づいてスケジューリングしていた一方、Pod affinity/anti-affinityではすでにNodeにスケジュールされているPodのラベルに基づいてスケジューリングする。
+
+よく使うユースケースとしては、Node障害に備えて「同じアプリケーションを動かしているPodは同じNodeに乗せない」とするルールを追加することである。せっかくDeploymentでPodを冗長化しても、同じNodeに載っているとそのNodeが故障しただけでPodは全滅（サービス停止）してしまう。このルールを追加することで、Nodeに乗るPodを分散させることができる。ただし、このユースケースは最近登場したPod Topology Spread Constraintsで代替できることもある。
+
+Node affinityと同様に、requiredDuringSheduringIgnoredDuringExecutionとpreferredDuringSchedulingIgnoredDuringExecutionの二つのルールを指定可能。
+
+```yaml
+> cat chapter-07/pod-antiaffinity.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-anti-affinity
+  labels:
+    app: nginx
+spec:
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+            - key: app
+              operator: In
+              values:
+              - nginx
+          topologyKey: kubernetes.io/hostname
+  containers:
+  - name: nginx
+    image: nginx:1.25.3
+```
+
+このマニフェストでは「app:nginxのラベルがついているPodが割り当てられているNodeには、同じラベルを持つPodをなるべくスケジュールしない」というルールを指定している。
+
+今回、topologyKeyにkubernetes.io/hostnameを指定することで「同じホスト（node）に乗せない」という指定をしているが、ここをkubernetes.io/zoneと指定することで「同じデータセンター（zone）にPodを配置しない」というケースに使える。
+
