@@ -982,3 +982,55 @@ spec:
 ```
 
 ### Podのスケジュールを柔軟に指定する:AffinityとAnti-Affinity
+
+後述するTaint/Tolerationと混同されるが、役割は異なる。Affinityは日本語では「類似性」や「密接な関係」と訳される。NodeとPod、あるいはPod同士が「近くなるように」または「近づかないように」スケジューリングを制約する。
+
+Affinity/Anti-affinityは3種類ある。
+
+- Node affinity
+- Pod affinity
+- Pod anti-affinity
+
+#### Node Affinity
+
+Node selectorとかなり近いが、Node selectorと異なり「可能ならスケジュールする」という選択が可能。Node selectorは対応するNodeが存在しないとPodをスケジュールできなくなるため、Node障害に対して弱くなってしまう。Node affinityを使うとスケジュールを制御しつつNode障害にも対応可能になっているので、「絶対に特定のNodeにスケジュールする必要がある」というケース以外はこちらを選択する方が良い。
+
+Node selectorよりも柔軟にNodeを指定できるため、書き方が多少複雑になる。
+
+agginity.nodeAffinityの下にはrequiredDuringSchedulingIgnoredFuringExecutionとpreferredDuringSchedulingIgnoredDuringExecutionの二つを指定可能。どちらを指定するかでマニフェストの書き方が少し変わる。
+
+- requiredDuringSchedulingIgnoredDuringExecution：対応するNodeが見つからない場合、Podをスケジュールしない。Node selectorと考え方が同じだが、Nodeの指定方法がより柔軟にできる。
+- preferredDuringSchedulingIgnoredDuringExecution：対応するNodeが見つからない場合、適応なNodeにスケジュールする
+
+matchExpressionsを利用してNodeを指定する。Nodeを指定する方法は複数あるが、ここでは詳しく説明しない。
+
+```yaml
+> cat chapter-07/pod-nodeaffinity.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: node-affinity-pod
+spec:
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 1
+        preference:
+          matchExpressions:
+          - key: disktype
+            operator: In
+            values:
+            - ssd
+  containers:
+  - name: node-affinity-pod
+    image: nginx:1.25.3
+```
+
+このマニフェストでは「Nodeについているラベルのkeyがdisktypeで、valueにssdが含まれているときにはそのNodeにスケジュールするが、対応するNodeがない場合でもPodをスケジュールする」ということを言っている。
+
+operatorにはIn以外にもNotInやExistsなどを指定できるため、ラベルお指定が柔軟にできる。また、preferredDuringSchedulingIgnoredDuringExecutionを指定した場合、weightの指定が必要。複数preferredDuringSchedulingIgnoredDuringExecutionを指定したときに、各条件に重み付けをすることで一番weightの合計値が高いNodeにスケジュールされる。
+
+このマニフェストではNodeラベルが一致していなくてもPodがスケジュールされる。
+
+#### Pod AffinityとPod Anti-affinity
+
