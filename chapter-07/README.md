@@ -1104,3 +1104,87 @@ spec:
 
 ### TaintとToleration
 
+TaintとTolerationはそれぞれ対になる概念である。TaintはNodeに付与する設定で、TolerationはPodに付与する設定である。Taintは「汚れ」、Tolerationは「寛容」と訳される。NodeについているTaint（汚れ）をPodが許容できるかどうか、と言った設定の考え方になる。
+
+Node affinityでは「あるPodをどういうNodeにスケジュールしたいか」という指定方法だが、Taint/Tolerationは「あるNodeが特定のPodしかスケジュールしたくない（特に指定のないPodはスケジュールを拒否したい）」といった指定方法になる。
+
+NodeにTaintをつける場合は、次の方法でつけられる（マニフェストで指定する方法はクラウドプロバイダによって方法が変わる）
+
+`kubectl taint noded <対象ノード名> <label名>=<labelの値>:<Taintの効果>`
+
+例えば、次のようにTaintをつけたとする。
+
+`kubectl taint nodes node1 disktype=ssd:NoSchedule`
+
+このTaintに対応するtolerationは次のように指定する。
+
+```yaml
+> cat chapter-07/pod-tolerations.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.25.3
+    imagePullPolicy: IfNotPresent
+  tolerations:
+  - key: "disktype"
+    value: "ssd"
+    operator: "Equal"
+    effect: "NoSchedule"
+```
+
+Node affinityのサンプルマニフェストとにた設定にしている。Node affinityはNode側でスケジュールを制御できないため、affinityがついていないPodもスケジュールされている。Taintをつけることで「SSDを使用したいPod以外はスケジュールしない」と言った制御が可能になる。
+
+普段はNodeの管理をしていない場合でも、TaintによってPodがスケジュールできないこともあるため、TaintとTolerationは覚えていくと良い。
+
+### Tips:Pod PriorityとPreemption
+
+PodにはPriority（優先度）を設定できるという便利機能がある。しかし、思わぬスケジューリングが発生する可能性があるため、注意して使う。PodのPriorityはPod一つ一つに付与するのではなく、PriorityClassというリソースを使う。
+
+次の手順でPriorityを設定できる。
+
+1. PriorityClassを作成する
+2. 1で設定したPriorityClassをPodのマニフェストに指定する
+
+Priorityの高いPodがどのようにスケジューリングに作用するか説明する。例えば、priorityClassNameを指定した先ほどのnginx PodがどのNodeにもスケジュールできないときに、preemptionが発生する。あるNode上にスケジュールされている、nginx Podよりもpriorityが低いPodをEvict（強制退去）させることで、nginx Podをスケジュール可能にする。
+
+ちなみに、Kubernetesではsystem-cluster-criticalとsystem-node-criticalというPriorityClassをデフォルトで作成する。
+
+```zsh
+> kubectl describe priorityclasses --namespace default
+Name:              system-cluster-critical
+Value:             2000000000
+GlobalDefault:     false
+PreemptionPolicy:  PreemptLowerPriority
+Description:       Used for system critical pods that must run in the cluster, but can be moved to another node if necessary.
+Annotations:       <none>
+Events:            <none>
+
+
+Name:              system-node-critical
+Value:             2000001000
+GlobalDefault:     false
+PreemptionPolicy:  PreemptLowerPriority
+Description:       Used for system critical pods that must not be moved from their current node.
+Annotations:       <none>
+Events:            <none>
+```
+
+一般的なアプリのPodよりもK8sクラスタ用のPodを優先的にスケジュールするため、高いPriorityが付けられている。試しにsystem-node-criticalのPriorityClassを利用しているPodを確認する。
+
+```zsh
+> kubectl get pod --all-namespaces -o jsonpath='{range .items[?(@.spec.priorityClassName=="system-node-critical")]}{.metadata.name}{"\t"}{.metadata.namespace}{"\n"}{end}'
+etcd-kind-control-plane kube-system
+kube-apiserver-kind-control-plane       kube-system
+kube-controller-manager-kind-control-plane      kube-system
+kube-proxy-8r5n5        kube-system
+kube-scheduler-kind-control-plane       kube-system
+```
+
+K8sクラスタのcontrol-plane用Podがリストアップされた。
+
+### Podのスケジューリングがうまくいかない
+
