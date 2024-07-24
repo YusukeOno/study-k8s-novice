@@ -814,7 +814,6 @@ hello-server-856d5c6c7b-vlkz2   1/1     Running   0          13m
 
 続いて、port-forwardを行う。アプリにアクセスすることでメモリリークが発生するようにできている。15秒ほど経つと、OOMKilledと出ているのがわかる。
 
-
 ```zsh
 > kubectl port-forward deployments/hello-server 8080:8080 --namespace default
 Forwarding from 127.0.0.1:8080 -> 8080
@@ -1069,4 +1068,39 @@ spec:
 このマニフェストでは「app:nginxのラベルがついているPodが割り当てられているNodeには、同じラベルを持つPodをなるべくスケジュールしない」というルールを指定している。
 
 今回、topologyKeyにkubernetes.io/hostnameを指定することで「同じホスト（node）に乗せない」という指定をしているが、ここをkubernetes.io/zoneと指定することで「同じデータセンター（zone）にPodを配置しない」というケースに使える。
+
+### Podを分散するための設定:Pod Topology Spread Constraints
+
+Pod Topology Spread ConstraintsはPodを分散するための設定です。topologyKeyを使うことでどのようにPodを分散させるかを表現できる。例えば、topologyKeyにNodeのkubernetes.io/hostnameラベルを指定すると、ホスト間でPodを分散してスケジュールできうr。Pod anti-affinityでも似たような設定ができるが、この機能はPod anti-affinityより後に入っただけあって柔軟に設定できる。
+
+pod anti-anffinityではpreferredDuringSchedulingIgnoredDuringExecutionを指定すると、Pod数がNode数を超えると、それ以上は制御できなかった（単一のNodeにPodが偏ってしまうこともあり得る）。逆に、完全に分散させようとrequiredDuringScjedulingIgnoredDuringExecutionを利用すると、今度はPod数がNode数を超えられなくなってしまう。
+
+Pod Topology Spread ConstraintsではPod数がNode数を超えてもなるべく分散させるような設定を行うことができる。
+
+```yaml
+> cat chapter-07/pod-topology.yaml
+kind: Pod
+apiVersion: v1
+metadata:
+  name: mypod
+  labels:
+    app: nginx
+spec:
+  topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app: nginx
+  containers:
+  - name: nginx
+    image: nginx:1.25.3
+```
+
+ポイントとなる設定値はmaxSkew。NodeにスケジュールされているPod数の差分を見て、maxSke:1だと差分が1より大きくならないようにスケジュールする。
+
+ただし、スケールダウン時に再分散されないなどPod Topology Spread Constraintsも万能ではない。
+
+### TaintとToleration
 
