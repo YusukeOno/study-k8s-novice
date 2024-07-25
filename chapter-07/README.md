@@ -1188,3 +1188,12 @@ K8sクラスタのcontrol-plane用Podがリストアップされた。
 
 ### Podのスケジューリングがうまくいかない
 
+このハンズオンではマルチノード環境が求められる。kindを利用するか、killercodaを使う。
+
+まずは現在使っているクラスタを削除する。
+
+```zsh
+> kind delete cluster
+Deleting cluster "kind" ...
+Deleted nodes: ["kind-control-plane"]
+```
