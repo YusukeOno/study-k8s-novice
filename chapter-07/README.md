@@ -1243,3 +1243,149 @@ kind-multinode-worker2         Ready    <none>          65s   v1.29.0
 kind-multinode-wokerとkind-multinode-worker2ができていることが確認できる。
 
 では、マニフェストをapplyする。
+
+```zsh
+> kubectl apply --filename chapter-07/deployment-schedule-handson.yaml --namespace default
+deployment.apps/hello-server created
+```
+
+続いて、Podの状態を確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                           READY   STATUS    RESTARTS   AGE
+hello-server-9c5ff67bd-9rtgj   1/1     Running   0          28s
+hello-server-9c5ff67bd-ch4wz   0/1     Pending   0          28s
+hello-server-9c5ff67bd-q9ms9   1/1     Running   0          28s
+```
+
+Podが一つPendingになっている。詳細を見てみる。
+
+```yaml
+> kubectl describe pod hello-server-9c5ff67bd-ch4wz --namespace default
+Name:             hello-server-9c5ff67bd-ch4wz
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             <none>
+Labels:           app=hello-server
+                  pod-template-hash=9c5ff67bd
+Annotations:      <none>
+Status:           Pending
+IP:               
+IPs:              <none>
+Controlled By:    ReplicaSet/hello-server-9c5ff67bd
+Containers:
+  hello-server:
+    Image:        blux2/hello-server:1.8
+    Port:         8080/TCP
+    Host Port:    0/TCP
+    Environment:  <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-wcpcj (ro)
+Conditions:
+  Type           Status
+  PodScheduled   False 
+Volumes:
+  kube-api-access-wcpcj:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    ConfigMapOptional:       <nil>
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason            Age   From               Message
+  ----     ------            ----  ----               -------
+  Warning  FailedScheduling  72s   default-scheduler  0/3 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 2 node(s) didn't match pod anti-affinity rules. preemption: 0/3 nodes are available: 1 Preemption is not helpful for scheduling, 2 No preemption victims found for incoming pod.
+```
+
+Eventsを確認する。
+
+- `0/3 nodes are available:`　3つあるNodeのどれにもスケジュールできていない。
+- `1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }`　1つのNodeにTaintがついているが、それに対応するtolerationがPodについていないので、スケジュールできていない。
+- `2 node(s) didn't match pod anti-affinity rules`　2つのNodeはPod anti-affinity ruleにマッチしないためスケジュールができない
+- `preemption: 0/3 nodes are available:`　PreemptionによってスケジュールできるNodeがない
+
+スケジュールできない事情はわかったが、どう直すのが正しいのだろうか。まずは、TolerationとAffinityについて、マニフェストを確認する。
+
+```zsh
+> kubectl get deployment hello-server --output=jsonpath='{.spec.template.spec.tolerations}' --namespace default | jq
+# 何も表示されない
+> kubectl get deployment hello-server --output=jsonpath='{.spec.template.spec.affinity}' --namespace default | jq
+{
+  "podAntiAffinity": {
+    "requiredDuringSchedulingIgnoredDuringExecution": [
+      {
+        "labelSelector": {
+          "matchExpressions": [
+            {
+              "key": "app",
+              "operator": "In",
+              "values": [
+                "hello-server"
+              ]
+            }
+          ]
+        },
+        "topologyKey": "kubernetes.io/hostname"
+      }
+    ]
+  }
+}
+```
+
+Tolerationは何もついておらず、Pod anti-affinityがついている。Podnoanti-affinityの内容としては「同じKubernetes Nodeにapp: hello-serverというラベルがついたPodはスケジュールしない」ということを書いている。Nodeが3つあるのに、なぜPodが3つスケジュールできないか。ここでヒントとなるのは先ほど見たPodのEventsの`1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }`となる。
+
+次のコマンドでNodeのTolerationを見てみる。
+
+```zsh
+> kubectl get nodes -o custom-columns='NAME:.metadata.name,TAINTS-KEY:.spec.taints[*].key'
+NAME                           TAINTS-KEY
+kind-multinode-control-plane   node-role.kubernetes.io/control-plane
+kind-multinode-worker          <none>
+kind-multinode-worker2         <none>
+```
+
+`kind-multinode-control-plane`という名前のNodeにnode-role.kubernetes.io/control-planeというTaintがついている。直し方はいくつかある。
+
+1. Tolerationを付けてTaint: {mode-role.kubernetes.io/control-plain:}がついているNodeにスケジュール可能とする
+2. Nodeを増やし、Pod anti-affinityが守れるようにする
+3. Deploymentのreplicasを減らし、Pod anti-affinityが守れるようにする
+4. requiredDuringSchedulingIgnoredDuringExecutionをpreferredDuringSchedulingIgnoredDuringExecutionに変更し、Pod anti-affinityが守れなくても問題ないようにする。
+
+他にもNodeのTaintを外したり、Pod anti-affinityを外したりする方法もある。2は環境によってはムズカシかもしれない。
+
+本番運用環境はどうだろうか？アプリサーバはControl Plane用のNodeに乗せるのは適切ではないため、1は推奨されない。2はコストがかかるため、どうしても今の設定をいじれない場合以外はおすすめではない。3と4のどちらかでTaintやPod anti-affinityを修正することが多い。
+
+今回は最も簡単な3を選択する。次のコマンドでreplicasを2に変更する。今回はDeploymentのreplica数を変更する`kubectl scale`コマンドを利用する。
+
+```zsh
+> kubectl scale deployment hello-server --replicas=2 --namespace default
+deployment.apps/hello-server scaled
+```
+
+Podの状態を確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                           READY   STATUS    RESTARTS   AGE
+hello-server-9c5ff67bd-9rtgj   1/1     Running   0          22m
+hello-server-9c5ff67bd-q9ms9   1/1     Running   0          22m
+```
+
+Podが全てRunningとなった。最後に掃除をする。
+
+```zsh
+> kubectl delete --filename chapter-07/deployment-schedule-handson.yaml --namespace default
+deployment.apps "hello-server" deleted
+```
+
+Node数が多くなり、複数のTaint/Pod affiniry/Pod anti-affinityを使っているとFailed SchedulingのEvent欄にたくさんの理由が書かれる。読み解くのが大変だが、必ず何かヒントがあるので、自分が想定した設定になっているかを確認しよう。
+
+## アプリをスケールさせる
+
+
