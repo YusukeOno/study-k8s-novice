@@ -1197,3 +1197,49 @@ K8sクラスタのcontrol-plane用Podがリストアップされた。
 Deleting cluster "kind" ...
 Deleted nodes: ["kind-control-plane"]
 ```
+
+続いて、次のconfigは以下。
+
+```yaml
+> cat kind/multinode-config.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+- role: worker
+- role: worker
+```
+
+このconfigを元にクラスタを作成する。
+
+```zsh
+> kind create cluster -n kind-multinode --config kind/multinode-config.yaml --image=kindest/node:v1.29.0
+Creating cluster "kind-multinode" ...
+ ✓ Ensuring node image (kindest/node:v1.29.0) 🖼
+ ✓ Preparing nodes 📦 📦 📦  
+ ✓ Writing configuration 📜 
+ ✓ Starting control-plane 🕹️ 
+ ✓ Installing CNI 🔌 
+ ✓ Installing StorageClass 💾 
+ ✓ Joining worker nodes 🚜 
+Set kubectl context to "kind-kind-multinode"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-kind-multinode
+
+Thanks for using kind! 😊
+```
+
+ワーカーノード2台のクラスタができたことを確認する。
+
+```zsh
+> kubectl get node
+NAME                           STATUS   ROLES           AGE   VERSION
+kind-multinode-control-plane   Ready    control-plane   88s   v1.29.0
+kind-multinode-worker          Ready    <none>          65s   v1.29.0
+kind-multinode-worker2         Ready    <none>          65s   v1.29.0
+```
+
+kind-multinode-wokerとkind-multinode-worker2ができていることが確認できる。
+
+では、マニフェストをapplyする。
