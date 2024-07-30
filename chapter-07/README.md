@@ -1394,3 +1394,120 @@ K8sでは自動で水平スケール、垂直スケールを行うことがで�
 
 ### 水平スケール
 
+Horizontal Pod Autoscaler(HPA)を利用することで自動的にPod数を増やしたり、減らしたりすることができる。HPAは通常CPUやメモリの値に応じてPod数が増減するが、任意のメトリクスを利用して増減させることも可能。
+
+HPAを利用するためにはmetrics-serverをインストールする必要がある。
+
+```zsh
+> kubectl apply --filename https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.6.4/components.yaml
+serviceaccount/metrics-server created
+clusterrole.rbac.authorization.k8s.io/system:aggregated-metrics-reader created
+clusterrole.rbac.authorization.k8s.io/system:metrics-server created
+rolebinding.rbac.authorization.k8s.io/metrics-server-auth-reader created
+clusterrolebinding.rbac.authorization.k8s.io/metrics-server:system:auth-delegator created
+clusterrolebinding.rbac.authorization.k8s.io/system:metrics-server created
+service/metrics-server created
+deployment.apps/metrics-server created
+apiservice.apiregistration.k8s.io/v1beta1.metrics.k8s.io created
+```
+
+```zsh
+> kubectl patch --namespace kube-system deployment metrics-server --type=json --patch '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+deployment.apps/metrics-server patched
+```
+
+metrics-serverが正常に起動していることを確認する。
+
+```zsh
+> kubectl get deployment metrics-server --namespace kube-system
+NAME             READY   UP-TO-DATE   AVAILABLE   AGE
+metrics-server   1/1     1            1           10m
+```
+
+READYが1/1、AVAILABLEが1になっていれば良い。次のようにマニフェストを書くことで水平スケールを実現する。
+
+```yaml
+> cat chapter-07/hpa-hello-server.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hpa-handson
+  labels:
+    app: hello-server
+spec:
+  selector:
+    matchLabels:
+      app: hello-server
+  template:
+    metadata:
+      labels:
+        app: hello-server
+    spec:
+      containers:
+      - name: hello-server
+        image: blux2/hello-server:1.8
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "10Mi"
+            cpu: "5m"
+          limits:
+            memory: "10Mi"
+            cpu: "5m"
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hello-server-hpa
+spec:
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+  - resource:
+      name: cpu
+      target:
+        averageUtilization: 50
+        type: Utilization
+    type: Resource
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: hpa-handson
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-server-service
+spec:
+  selector:
+    app: hello-server
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+```
+
+HPAのマニフェストでは`minReplicas`と`maxReplicas`を指定し、どれくらいPodを増減するかを決める。増減を決めるためのメトリクスは`metrics`以下に書く。
+
+`target.averageUtilication`にはアプリの望ましいCPU使用率を書く。ここでは50とあるため、CPU使用率が常に50%を下回るようにPod数を増減させる。
+
+では、このマニフェストを使って実際にスケールすることを確認する。
+
+```zsh
+> kubectl apply --filename chapter-07/hpa-hello-server.yaml --namespace default
+deployment.apps/hpa-handson created
+horizontalpodautoscaler.autoscaling/hello-server-hpa created
+service/hello-server-service created
+```
+
+しばらくHPAの様子を観察する。
+
+```zsh
+> kubectl get hpa --watch --namespace default
+NAME               REFERENCE                TARGETS         MINPODS   MAXPODS   REPLICAS   AGE
+hello-server-hpa   Deployment/hpa-handson   <unknown>/50%   1         10        1          40s
+hello-server-hpa   Deployment/hpa-handson   0%/50%          1         10        1          45
+```
+
+TARGETSが0%から動かず、REPLICASも1から増えない。負荷をかけてPod数が増える様子を見てみる。
