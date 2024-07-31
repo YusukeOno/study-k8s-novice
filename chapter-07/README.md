@@ -1511,3 +1511,42 @@ hello-server-hpa   Deployment/hpa-handson   0%/50%          1         10        
 ```
 
 TARGETSが0%から動かず、REPLICASも1から増えない。負荷をかけてPod数が増える様子を見てみる。
+
+```zsh
+> kubectl --namespace default run --stdin --tty load-generator --rm --image=busybox:1.28 --restart=Never -- /bin/sh -c "while sleep 0.01; do wget -q -O- http://hello-server-service.default.svc.cluster.local:8080; done"
+```
+
+上記のコマンドで負荷をかける。
+
+しばらくすると、REPLICASが増えていると思う。TARGETSに書かれているパーセンテージの左側の値が増えているが、これが実際に使用している平均CPUの値である。
+
+```zsh
+> kubectl get hpa --watch --namespace default
+NAME               REFERENCE                TARGETS   MINPODS   MAXPODS   REPLICAS   AGE
+hello-server-hpa   Deployment/hpa-handson   0%/50%    1         10        1          15h
+hello-server-hpa   Deployment/hpa-handson   20%/50%   1         10        1          15h
+hello-server-hpa   Deployment/hpa-handson   200%/50%   1         10        1          15h
+hello-server-hpa   Deployment/hpa-handson   200%/50%   1         10        4          15h
+hello-server-hpa   Deployment/hpa-handson   180%/50%   1         10        4          15h
+hello-server-hpa   Deployment/hpa-handson   85%/50%    1         10        4          15h
+hello-server-hpa   Deployment/hpa-handson   80%/50%    1         10        7          15h
+hello-server-hpa   Deployment/hpa-handson   70%/50%    1         10        7          15h
+hello-server-hpa   Deployment/hpa-handson   50%/50%    1         10        7          15h
+hello-server-hpa   Deployment/hpa-handson   42%/50%    1         10        7          15h
+hello-server-hpa   Deployment/hpa-handson   45%/50%    1         10        7          15h
+hello-server-hpa   Deployment/hpa-handson   42%/50%    1         10        7          15h
+```
+
+負荷をかけ続けると、maxReplicasで指定した10個までPodが増える。このように、負荷に応じてPodがスケールするため、急な負荷に対応できるようになる。ただし、試してわかるがスケールするには少し時間がかかるため、本当に急なスパイクには対応できない。
+
+最後に掃除をする。
+
+```zsh
+> kubectl delete --filename chapter-07/hpa-hello-server.yaml --namespace default
+deployment.apps "hpa-handson" deleted
+horizontalpodautoscaler.autoscaling "hello-server-hpa" deleted
+service "hello-server-service" deleted
+```
+
+### 垂直スケール
+
