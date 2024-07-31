@@ -1554,3 +1554,6 @@ Vertical Pod Autoscaler(VPA)を利用することで、自動でResource Request
 
 ## Node退役に備える
 
+Nodeが故障したり、K8sのバージョン更新などでNodeのシャットダウンが必要なケースは度々ある。K8sではNodeがシャットダウンしても安全にサービスを稼働し続けるための機能がいくつかある。これらの機能を使い、Nodeシャットダウンが起きても問題なくサービスを稼働し続けられるようにする。
+
+### アプリの可用性を保証するPodDisruptionBudget(PDB)
