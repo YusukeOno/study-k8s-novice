@@ -38,3 +38,45 @@ Hello, world! Let's learn Kubernetes!
 
 ## アプリを更新する
 
+マニフェストを適用してアプリを更新する。
+
+```zsh
+> kubectl apply --filename chapter-08/hello-server-update.yaml --namespace default
+deployment.apps/hello-server configured
+configmap/hello-server-configmap configured
+service/hello-server-external unchanged
+poddisruptionbudget.policy/hello-server-pdb configured
+```
+
+## 正常性確認を行なってみる
+
+問題なく更新できているか確認する。
+
+```zsh
+> curl localhost:30599
+Hello, world! Let's learn Kubernetes!
+```
+
+アプリと疎通できているようだ。問題なくアプリの更新を行うことができたか、Deploymentのステータスを確認する。
+
+```zsh
+> kubectl get deployment --namespace default
+NAME           READY   UP-TO-DATE   AVAILABLE   AGE
+hello-server   3/3     1            3           7h41m
+```
+
+UP-TO-DATEが1になっている。これはPodが1つ更新中ということを示している。続いて、ReplicaSetを確認する。
+
+```zsh
+> kubectl get replicaset --namespace default
+NAME                      DESIRED   CURRENT   READY   AGE
+hello-server-69fdcc8fb9   1         1         0       2m26s
+hello-server-7765f564df   3         3         3       7h42m
+```
+
+AGEの若いReplicaSetのREADYが0で、古いReplicaSetのREADYが3になっている。どうやら古いバージョンのアプリが動き続けているだけのようだ。
+
+ここからは次のことをゴールに原因調査と解消を行う。
+
+- アプリにアクセスして「Hello, world! Let's build, break and fix」が返ってくる
+- AGEの若いReplicaSetのREADYが3つになる
