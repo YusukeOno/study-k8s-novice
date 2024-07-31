@@ -1550,3 +1550,7 @@ service "hello-server-service" deleted
 
 ### 垂直スケール
 
+Vertical Pod Autoscaler(VPA)を利用することで、自動でResource Requests/Limitsの値を変更できる。しかし、VPAは先に説明したHPAと同じリソースに対して同時に利用できないため、HPAのみ利用しているケースが多い。
+
+## Node退役に備える
+
