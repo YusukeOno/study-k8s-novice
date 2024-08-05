@@ -90,3 +90,13 @@ kubectlからkube-apiserverにPodの作成が指示され、etcdにマニフェ�
 
 ### 準備クラスタを構築する
 
+既存クラスタがあれば、一旦削除する。
+
+```zsh
+> kubectl delete cluster
+Deleting cluster "kind" ...
+Deleted nodes: ["kind-control-plane"]
+```
+
+マニフェスト`kind/multinode-nodeport.yaml`を利用して、次のコマンドでクラスタを構築する。
+
