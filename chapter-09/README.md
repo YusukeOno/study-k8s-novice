@@ -171,3 +171,65 @@ Hello, world! Let's learn Kubernetes!
 
 ### Control Planeを停止する
 
+いきなりControl Planeを停する。kindを利用しているのであれば、Control Plane用のDockerコンテナを止める。まずは、Control PlaneのdockerコンテナIDを確認する。
+
+```zsh
+> docker ps
+CONTAINER ID   IMAGE                  COMMAND                  CREATED              STATUS              PORTS                        NAMES
+6a9d676c8a0a   kindest/node:v1.29.0   "/usr/local/bin/entr…"   About a minute ago   Up About a minute   127.0.0.1:30599->30599/tcp   multinode-nodeport-worker
+fa75ea597b3b   kindest/node:v1.29.0   "/usr/local/bin/entr…"   About a minute ago   Up About a minute                                multinode-nodeport-worker2
+a41f895611f6   kindest/node:v1.29.0   "/usr/local/bin/entr…"   About a minute ago   Up About a minute   127.0.0.1:57172->6443/tcp    multinode-nodeport-control-plane
+```
+
+multinode-nodeport-control-planeと書かれているコンテナのCONTAINER IDをコピーし、コンテナを止める。
+
+```zsh
+> docker stop a41f895611f6
+a41f895611f6
+```
+
+では、hello-serverはどうなっただろうか？接続確認してみる。
+
+```zsh
+> curl localhost:30599
+Hello, world! Let's learn Kubernetes!
+```
+
+問題なく動いていそうだ。では、podのSTATUSも見てみる。
+
+```zsh
+> kubectl get pod --namespace default
+The connection to the server 127.0.0.1:57172 was refused - did you specify the right host or port?
+```
+
+接続ができない、これはControl Planeを停止したため、kube-apiserverに接続できなくなっていることが理由である。しかし、Control Planeが停止したとしてもコンテナは起動し続ける。kube-apiserverと接続できないのでコンテナの更新やPod数の増減は行えないが、少なくともサービスの稼働が即ざいに損なわれるということはない。Kubernetesが障害に強いと言われる理由がわかっただろうか。
+
+Control Planeを起動し直すことが、今まで通りkubectlが使えるようになる。
+
+```zsh
+> docker start a41f895611f6
+a41f895611f6
+```
+
+Podを参照できることを確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                          READY   STATUS    RESTARTS   AGE
+hello-server-965f5b86-djs88   1/1     Running   0          4m53s
+hello-server-965f5b86-fd6xq   1/1     Running   0          4m53s
+hello-server-965f5b86-vzppj   1/1     Running   0          4m53s
+```
+
+最後にクラスタごと掃除する。
+
+```zsh
+> kind delete cluster -n multinode-nodeport
+Deleting cluster "multinode-nodeport" ...
+Deleted nodes: ["multinode-nodeport-worker" "multinode-nodeport-worker2" "multinode-nodeport-control-plane"]
+```
+
+デフォルトクラスタを立ち上げ直す。
+
+## Kubernetesを拡張する
+
