@@ -231,5 +231,22 @@ Deleted nodes: ["multinode-nodeport-worker" "multinode-nodeport-worker2" "multin
 
 デフォルトクラスタを立ち上げ直す。
 
+```zsh
+> kind create cluster --image=kindest/node:v1.29.0
+Creating cluster "kind" ...
+ ✓ Ensuring node image (kindest/node:v1.29.0) 🖼
+ ✓ Preparing nodes 📦  
+ ✓ Writing configuration 📜 
+ ✓ Starting control-plane 🕹️ 
+ ✓ Installing CNI 🔌 
+ ✓ Installing StorageClass 💾 
+Set kubectl context to "kind-kind"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-kind
+
+Thanks for using kind! 😊
+```
+
 ## Kubernetesを拡張する
 
