@@ -100,3 +100,74 @@ Deleted nodes: ["kind-control-plane"]
 
 マニフェスト`kind/multinode-nodeport.yaml`を利用して、次のコマンドでクラスタを構築する。
 
+```zsh
+> kind create cluster -n multinode-nodeport --config ./kind/multinode-nodeport.yaml --image=kindest/node:v1.29.0
+Creating cluster "multinode-nodeport" ...
+ ✓ Ensuring node image (kindest/node:v1.29.0) 🖼
+ ✓ Preparing nodes 📦 📦 📦  
+ ✓ Writing configuration 📜 
+ ✓ Starting control-plane 🕹️ 
+ ✓ Installing CNI 🔌 
+ ✓ Installing StorageClass 💾 
+ ✓ Joining worker nodes 🚜 
+Set kubectl context to "kind-multinode-nodeport"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-multinode-nodeport
+
+Have a nice day! 👋
+```
+
+node一覧を確認する。
+
+```zsh
+> kubectl get node
+NAME                               STATUS   ROLES           AGE   VERSION
+multinode-nodeport-control-plane   Ready    control-plane   44s   v1.29.0
+multinode-nodeport-worker          Ready    <none>          24s   v1.29.0
+multinode-nodeport-worker2         Ready    <none>          24s   v1.29.0
+```
+
+想定通りマルチノードになっている。
+
+### hello-serverを起動する
+
+hello-serverを起動する。マニフェストは`chapter-09/hello-server.yaml`を使用する。
+
+マニフェストをapplyする。
+
+```zsh
+> kubectl apply --filename chapter-09/hello-server.yaml --namespace default
+deployment.apps/hello-server created
+poddisruptionbudget.policy/hello-server-pdb created
+service/hello-server-external created
+```
+
+Podが起動していることを確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                          READY   STATUS    RESTARTS   AGE
+hello-server-965f5b86-5vn25   0/1     Running   0          27s
+hello-server-965f5b86-d27kq   0/1     Running   0          27s
+hello-server-965f5b86-wm2br   0/1     Running   0          27s
+```
+
+hello-serverへの疎通を確認する。まずはNodeのIPを取得する。
+
+```zsh
+> kubectl get node multinode-nodeport-worker -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'
+172.18.0.3%
+```
+
+取得したInternalIPを利用してアクセスする。
+
+```zsh
+> curl localhost:30599
+Hello, world! Let's learn Kubernetes!
+```
+
+アプリが問題なく動いているようだ。
+
+### Control Planeを停止する
+
