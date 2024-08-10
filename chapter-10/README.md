@@ -45,6 +45,26 @@ GitOpsは概念だが、ではどのようにしてワークフローに組み�
 
 #### Argo CD
 
+`https://argoproj.github.io/cd/`
+
+Argo CDではApplicationという名前のCustom Resourceを利用し、「どのリポジトリの」「どのマニフェストの」「どのバージョン（例：ブランチ）の」マニフェストを「どの環境に」適用するかを指定します。
+
+#### Spinnaker
+
+`https://spinnaker.io/`
+
+SpinnakerはKubernetes以外にも、主要なクラウドプロバイダに対応していることを売りにしている。そのため、Argo CDはKubernetesクラスタへのデプロイのみを扱うが、SpinnakerではDocker ImageのビルドなどCIパイプラインの構築もできる。
+
+#### FluxCD
+
+`https://fluxcd.io/`
+
+Argo CDとかなり近いが、v2になってマルチテナンシーが違い。
+
+## Kubernetesのマニフェスト管理
+
+
+
 
 
 
