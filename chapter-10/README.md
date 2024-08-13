@@ -145,4 +145,28 @@ Forwarding from [::1]:8080 -> 3000
 
 ブラウザで`http://localhost:8080`を実行すると、Grafanaのログイン画面が表示される。
 
+Helm Chartはテンプレートだが、次のコマンドを打つとどのような値を設定してカスタマイズ可能かがわかる。
+
+```yaml
+> helm show values prometheus-community/kube-prometheus-stack
+# Default values for kube-prometheus-stack.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+## Provide a name in place of kube-prometheus-stack for `app:` labels
+##
+nameOverride: ""
+
+## Override the deployment namespace
+##
+namespaceOverride: ""
+
+以下略
+```
+
+ここで得られた値がデフォルトの設定となっている。このデフォルト設定を変更するためには変更する設定値を書いたvalues.yamlをローカルに保存し、helm intallの引数として設定する。こうすることで独自カスタマイズされた状態でCustom Controllerを環境にデプロイできる。
+
+しかし、helm installコマンドを直接実行する方法はGitOpsと相性が悪い。そのため、Argo CDなど各GitOpsエージェントの仕様に従ってHelmインストールを行ったり、CIを利用して生成したマニフェストをGitOpsで管理したりするといった方法がある。
+
+後者はhelm templateというローカルでテンプレートをレンダリングする、という方法が利用可能。
 
