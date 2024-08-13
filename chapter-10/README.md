@@ -99,3 +99,50 @@ Update Complete. ⎈Happy Helming!⎈
 
 #### インストール先のnamespaceを作成する
 
+namespaceを作成しておく。
+
+```zsh
+> kubectl create namespace monitoring
+namespace/monitoring created
+```
+
+#### helm installを実行する
+
+```zsh
+> helm install kube-prometheus-stack --namespace monitoring prometheus-community/kube-prometheus-stack
+NAME: kube-prometheus-stack
+LAST DEPLOYED: Wed Aug 14 07:10:59 2024
+NAMESPACE: monitoring
+STATUS: deployed
+REVISION: 1
+NOTES:
+kube-prometheus-stack has been installed. Check its status by running:
+  kubectl --namespace monitoring get pods -l "release=kube-prometheus-stack"
+
+Visit https://github.com/prometheus-operator/kube-prometheus for instructions on how to create & configure Alertmanager and Prometheus instances using the Operator.
+```
+
+しばらくすると、幾つものPodが立ち上がっていることが確認できる。
+
+```zsh
+> kubectl get pod --namespace monitoring
+NAME                                                        READY   STATUS    RESTARTS   AGE
+alertmanager-kube-prometheus-stack-alertmanager-0           2/2     Running   0          2m54s
+kube-prometheus-stack-grafana-76b485bc4c-dqq92              3/3     Running   0          3m41s
+kube-prometheus-stack-kube-state-metrics-7db65fb76b-bhq6m   1/1     Running   0          3m41s
+kube-prometheus-stack-operator-7566b999fc-bxgml             1/1     Running   0          3m41s
+kube-prometheus-stack-prometheus-node-exporter-bsw9h        1/1     Running   0          3m41s
+prometheus-kube-prometheus-stack-prometheus-0               2/2     Running   0          2m54s
+```
+
+ダッシュボードのログイン画面を表示してみる。自動生成されたServiceを使ってport-forwardを行う。
+
+```zsh
+> kubectl port-forward service/kube-prometheus-stack-grafana --namespace monitoring 8080:80
+Forwarding from 127.0.0.1:8080 -> 3000
+Forwarding from [::1]:8080 -> 3000
+```
+
+ブラウザで`http://localhost:8080`を実行すると、Grafanaのログイン画面が表示される。
+
+
