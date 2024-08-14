@@ -186,3 +186,98 @@ namespaceOverride: ""
 
 ### Kustomizeでマニフェストをわかりやすくする
 
+Kustomizeは少しクセがある。
+
+#### 前提知識
+
+baseディレクトリと、overlaysディレクトリがある。ビルドするときにkustomization.yamlというファイルが参照される。
+
+このkustomization.yamlというファイルが参照される。
+
+このkustomization.yamlに、具体的にどのディレクトリ（ファイル）をbaseとして定義し、どのディレクトリ（ファイル）をoverkaysとして定義するのかを記載する。
+
+baseディレクトリには、stagingとproduction共通のマニフェストが書かれており、overlaysの各staging/productionディレクトリ内で環境固有の設定が書かれている。
+
+#### 準備
+
+作成したマニフェストを実際に環境に適用できることを試したいので、Kubernetesクラスタを準備する。今回はクラスタ構成の制約はない。
+
+また、kustomizeコマンドを利用するため、インストールする。
+
+```zsh
+> brew install kustomize
+```
+
+#### 要件
+
+このハンズオンで利用するマニフェストは以下の通り。
+
+```yaml
+> cat chapter-10/hello-server.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-server
+  labels:
+    app: hello-server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: hello-server
+  template:
+    metadata:
+      labels:
+        app: hello-server
+    spec:
+      containers:
+      - name: hello-server
+        image: blux2/hello-server:1.8
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "10m"
+          limits:
+            memory: "256Mi"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: hello-server-pdb
+spec:
+  maxUnavailable: 10%
+  selector:
+    matchLabels:
+      app: hello-server
+```
+
+次の要件を満たすように書くディレクトリ内のマニフェストを書いていく。
+
+- production環境とstaging環境にデプロイしたい
+- productionのreplicasは10にしたい
+- productionのrequests.memoryとrequests.limitは1Giにしたい
+- stagingではPodDisruptionBudgetは必要ない
+
+#### マニフェストを分割する
+
+`kubectl apply --filename`の作業を簡単にするために一つのマニフェストにまとめていたが、kustomizeを利用すると`kustomize buid <ディレクトリ名>`で全てのマニフェストをまとめて一つに出力してくれる。また、overlaysとbaseに分けるとき、リソースごとに分かれている方が扱いやすい。このため、一つのファイルにまとまっているマニフェスト chapter-10/hello-server.yamlを分割する。
+
+分割はリソースごとに行い、deployment.yamlとpdb.yamlというファイル名で保存する。
+
+#### ファイルをbaseディレクトリに置く
+
+
+
