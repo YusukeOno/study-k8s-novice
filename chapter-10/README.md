@@ -279,5 +279,133 @@ spec:
 
 #### ファイルをbaseディレクトリに置く
 
+baseには共通するマニフェストをおく。今回は、PodDisruptionBudgetはproductionのみ、Deploymentはstaging/production共通で利用する次の構成になるように、base,overlays,productino,statingディレクトリを作成し、それぞれのファイルを置く。
+
+ルートディレクトリはサービス名であるhello-serverにしているが、任意の名前で問題ない。
+
+#### 差分があるマニフェストをoverlysに置く
+
+productionの差分をdeployment.yamlに書く。ポイントとして、共有部分はbaseの内容が利用されるため、差分のある部分のみを記載すれば良い。
+
+```zsh
+> cat chapter-10/kustomize/hello-server/overlays/production/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-server
+spec:
+  replicas: 10
+  template:
+    spec:
+      containers:
+      - name: hello-server
+        resources:
+          requests:
+            memory: "1Gi"
+          limits:
+            memory: "1Gi"
+```
+
+このマニフェストをoverlays/productionに置く。
+
+#### kustomization.yamlを置く
+
+仕上げにkustomization.yamlを書いていく。このファイルがないと何もビルドされない。試しにkustomize buildを実行すると、エラーが出る。
+
+```zsh
+> kustomize build
+Error: unable to find one of 'kustomization.yaml', 'kustomization.yml' or 'Kustomization' in directory '/Users/yusuke.ono/Develop/GitHub/study-k8s-novice/chapter-10/kustomize/hello-server/overlays/production'
+```
+
+kustomization.yamlでよく使う表現として、resourceとpatchesがある。これ以外にもさまざまな設定ができるが、まずはこの二つを覚える。
+
+- resources：ベースとなるディレクトリやファイルを書く。baseディレクトリやそのディレクトリ固有のファイルを書く。
+- patched：overlaysでbaseの設定を上書きするときに使用する。上書きで使用するファイル名を指定する。
+
+それぞれのディレクトリで作成するkustomization.yamlを記載する。resourcesでディレクトリを参照するときには参照先のディレクトリにkustomization.yamlが必要なため、baseディレクトリにもkustomization.yamlを作成する。
+
+```zsh
+> cat chapter-10/kustomize/hello-server/base/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+```
+
+次のマニフェストはhello-server/overlays/production/kustomization.yamlとして保存する。
+
+```zsh
+> cat chapter-10/kustomize/hello-server/overlays/production/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - pdb.yaml
+patches:
+  - path: deployment.yaml
+```
+
+最後に次のマニフェストをhello-server/overlays/stagin.kustomization.yamlとして保存する。
+
+```zsh
+> cat chapter-10/kustomize/hello-server/overlays/staging/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+```
+
+
+
+```zsh
+> kustomize build
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hello-server
+  name: hello-server
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: hello-server
+  template:
+    metadata:
+      labels:
+        app: hello-server
+    spec:
+      containers:
+      - image: blux2/hello-server:1.8
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        name: hello-server
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          limits:
+            memory: 1Gi
+          requests:
+            cpu: 10m
+            memory: 1Gi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: hello-server-pdb
+spec:
+  maxUnavailable: 10%
+  selector:
+    matchLabels:
+      app: hello-server
+```
+
 
 
