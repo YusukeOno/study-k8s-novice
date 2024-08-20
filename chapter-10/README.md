@@ -354,10 +354,59 @@ resources:
   - ../../base
 ```
 
+#### kustomiza buildでファイルをビルドし、クラスタにapplyする
 
+最後にクラスタに不マニフェストをapplyする。
+
+先ほどhello-server/overlays/productionにディレクトリ変更したため、hello-serverがカレントディレクトリになるようにする。
+
+`cd ../../`
+
+まずはローカルでkustomize buildを実行し、ビルド結果を確認する。hello-serverディレクトリに移動する。
 
 ```zsh
-> kustomize build
+> kustomize build ./overlays/staging
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hello-server
+  name: hello-server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: hello-server
+  template:
+    metadata:
+      labels:
+        app: hello-server
+    spec:
+      containers:
+      - image: blux2/hello-server:1.8
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        name: hello-server
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          limits:
+            memory: 256Mi
+          requests:
+            cpu: 10m
+            memory: 256Mi
+```
+
+```zsh
+> kustomize build ./overlays/production
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -407,5 +456,28 @@ spec:
       app: hello-server
 ```
 
+stagingとproductionでそれぞれ別のマニフェストが出力された。今回はstaging用のマニフェストをK8s環境にapplyする。
 
+```zsh
+> kustomize build ./overlays/staging | kubectl --namespace default apply -f -
+deployment.apps/hello-server created
+```
 
+Podが作成できていることを確認する。
+
+```zsh
+> kubectl get pod --namespace default
+NAME                           READY   STATUS    RESTARTS   AGE
+hello-server-8584d5bbb-4hh78   1/1     Running   0          37s
+hello-server-8584d5bbb-cxsdx   1/1     Running   0          37s
+hello-server-8584d5bbb-przp5   1/1     Running   0          37s
+```
+
+Podが作成できた。最後に掃除をする。今回はlustomize buildしたマニフェストをapplyしているので、deleteも同様にkustomize buildする。
+
+```zsh
+> kustomize build ./overlays/staging | kubectl --namespace default delete -f -
+deployment.apps "hello-server" deleted
+```
+
+この章では開発フローに関する細かなテクニックを紹介した。これらのテクニックにはそれぞれ学習コストが必要になるため。個人の趣味や小さい組織では必ずしも必要になるわけではない。それでも頻繁位変更を適用するようになったり。組織の規模が大きくなったりするようであれば必ず役に立つ。
