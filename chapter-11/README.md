@@ -85,3 +85,108 @@ prometheus-kube-prometheus-stack-prometheus-0               2/2     Running   8 
 Prometheusは`/metrics`というエンドポイントに対してアクセスし、メトリクスを収集する。`/metrics`でどのようなメトリクスを収集可能にするかはアプリケーション開発者の自由である。今回はPrometheusのGo用ライブラリを利用し、Goに関連するメトリクスを収集可能にする。
 
 実装は次のとおりライブラリの追加と、metricsエンドポイントの追加のみ。
+
+```golang
+package main
+
+import (
+	"fmt"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"log"
+	"net/http"
+	"os"
+)
+
+func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprintf(w, "Hello, world! Let's learn Kubernetes!")
+	})
+
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/healthz" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "OK")
+		log.Printf("Health Status OK")
+	})
+
+	http.Handle("/metrics", promhttp.Handler())
+
+	log.Printf("Starting server on port %s\n", port)
+	err := http.ListenAndServe(":"+port, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+}
+```
+
+Prometheusでメトリクスを収集しやすくするために、Serviceリソースも追加している。
+
+```zsh
+> kubectl apply --filename chapter-11/namespace.yaml
+namespace/develop created
+
+> kubectl apply --filename chapter-11/hello-server.yaml
+deployment.apps/hello-server created
+service/hello-server created
+```
+
+Podが三つ作成できていれば準備完了。
+
+```zsh
+> kubectl get pod --namespace develop
+NAME                            READY   STATUS    RESTARTS   AGE
+hello-server-5ffcf97c8b-m7bft   1/1     Running   0          44s
+hello-server-5ffcf97c8b-mcd68   1/1     Running   0          44s
+hello-server-5ffcf97c8b-xj7hv   1/1     Running   0          44s
+```
+
+### メトリクスを収集するための設定を行う
+
+PrometheusはPull型のアーキテクチャをとっているため、Prometheus側に「何を収集するか」の設定を書く必要がある。
+
+今回は次のマニフェストを利用して収集を行う。
+
+```yaml
+> cat ./chapter-11/kube-prometheus-stack/values.yaml
+prometheus:
+  prometheusSpec:
+    additionalScrapeConfigs:
+      - job_name: hello-server
+        scrape_interval: 10s
+        static_configs:
+        - targets:
+          - hello-server.develop.svc.cluster.local:8080
+```
+
+設定ファイルを利用してhelm upgradeを行う。
+
+```zsh
+> helm upgrade kube-prometheus-stack -f chapter-11/kube-prometheus-stack/values.yaml prometheus-community/kube-prometheus-stack --namespace monitoring
+Release "kube-prometheus-stack" has been upgraded. Happy Helming!
+NAME: kube-prometheus-stack
+LAST DEPLOYED: Fri Aug 30 22:27:37 2024
+NAMESPACE: monitoring
+STATUS: deployed
+REVISION: 2
+NOTES:
+kube-prometheus-stack has been installed. Check its status by running:
+  kubectl --namespace monitoring get pods -l "release=kube-prometheus-stack"
+
+Visit https://github.com/prometheus-operator/kube-prometheus for instructions on how to create & configure Alertmanager and Prometheus instances using the Operator.
+```
+
+### Prometheusにアクセスする
+
