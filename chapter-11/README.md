@@ -190,3 +190,25 @@ Visit https://github.com/prometheus-operator/kube-prometheus for instructions on
 
 ### Prometheusにアクセスする
 
+PrometheusにGUIがついているので、アクセスしてみよう。まずはport-forwardを行う。
+
+```zsh
+> kubectl port-forward service/kube-prometheus-stack-prometheus --namespace monitoring 9090:9090
+Forwarding from 127.0.0.1:9090 -> 9090
+Forwarding from [::1]:9090 -> 9090
+```
+
+ブラウザでhttp://localhost:9090にアクセスする。
+
+次は、実際のメトリクスを見てみよう。Prometheusでもメトリクスを参照できる。
+
+1. メインページに戻る
+2. 検索窓に`go_gc_duration_seconds{job="hello-server"}`と入力する
+3. Executeボタンを押して検索する
+
+hello-serverのgo_gc_duration_secondsメトリクスの値を取得できた。
+
+![graph](./ScreenShot%202024-08-30%2022.34.40.png)
+
+### Grafanaにアクセスする
+
