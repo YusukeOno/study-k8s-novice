@@ -198,7 +198,7 @@ Forwarding from 127.0.0.1:9090 -> 9090
 Forwarding from [::1]:9090 -> 9090
 ```
 
-ブラウザでhttp://localhost:9090にアクセスする。
+ブラウザで`http://localhost:9090`にアクセスする。
 
 次は、実際のメトリクスを見てみよう。Prometheusでもメトリクスを参照できる。
 
