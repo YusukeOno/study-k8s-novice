@@ -212,3 +212,37 @@ hello-serverのgo_gc_duration_secondsメトリクスの値を取得できた。
 
 ### Grafanaにアクセスする
 
+続いてGrafanaにアクセスする。port-forwardを行う。
+
+```zsh
+kubectl port-forward service/kube-prometheus-stack-grafana --namespace monitoring 8080:80
+Forwarding from 127.0.0.1:8080 -> 3000
+Forwarding from [::1]:8080 -> 3000
+```
+
+ブラウザで `http://localhost:8080/` を開く。
+
+ログイン画面が表示されたら、次の入力を行い、ログインする。
+
+```plaintext
+username: admin
+password: prom-operator
+```
+
+ログインできたら、メトリクスを見てみる。左側のハンバーガーメニューからExploreを開く。
+
+Metrics欄に`go_gc_duration_seconds`を、Select labelにjob、Select valueにhello-serverを入れると、クエリが出力される。
+
+最後に右上の「Run query」ボタンをクリックしてグラフを表示する。
+
+これだけでは、Prometheusでできたことと同じなので、ダッシュボードも作ってみる。
+
+ダッシュボードを作ることで必要なクエ紙を保存してグラフ表示を固定できる。障害調査時に毎回クエリを実行するのではなく、関連するメトリクスをダッシュボードに保存しておき、パッと出せると良い。
+
+また、メトリクスに詳しくない人に共有するという使い方もできる。Explorerの画面からダッシュボードを作成するのは簡単。上の方にある「Add to dashboard」をクリックし、「Open dashboard」クリックする。
+
+まだグラフが一つしかないが、これがダッシュボードになる。また、アラートもGrafana上から設定できる。ハンバーガーメニューからAlertingを設定する。Alertingの設定方法が書かれた画面が出てくる。
+
+左のメニューからAlert rulesをクリックすると、デフォルトで設定されているアラートルールが一覧表示されている。
+
+以上
